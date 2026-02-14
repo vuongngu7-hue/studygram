@@ -86,7 +86,9 @@ export const checkConnection = async () => {
     return true;
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
-    if (e.message?.includes('401')) console.error("-> Error 401: Unauthorized. Check your API KEY in .env file.");
+    if (e.message?.includes('401') || e.message?.includes('403')) {
+        console.error("-> Error: Unauthorized/Forbidden. Check your API KEY in .env file.");
+    }
     if (e.message?.includes('404')) console.error("-> Error 404: Model not found. Check model name.");
     return false;
   }
