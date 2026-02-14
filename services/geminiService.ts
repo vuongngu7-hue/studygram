@@ -1,6 +1,7 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Schema } from "@google/genai";
 
 const FLASH_MODEL = 'gemini-3-flash-preview';
+const PRO_MODEL = 'gemini-3-pro-preview';
 
 // Initialize Gemini AI client safely
 const getAIInstance = () => {
@@ -34,32 +35,26 @@ const getAIInstance = () => {
 const parseGeminiJSON = (text: string, defaultValue: any) => {
   try {
     if (!text) return defaultValue;
-    // Remove markdown code blocks
+    // Remove markdown code blocks if present (though responseSchema prevents most)
     let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    
-    // Find the first '{' or '[' and the last '}' or ']'
-    const firstBrace = cleaned.indexOf('{');
-    const firstBracket = cleaned.indexOf('[');
-    let startIdx = -1;
-    let endIdx = -1;
-
-    // Determine if we are looking for an object or an array
-    if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
-      startIdx = firstBrace;
-      endIdx = cleaned.lastIndexOf('}');
-    } else if (firstBracket !== -1) {
-      startIdx = firstBracket;
-      endIdx = cleaned.lastIndexOf(']');
-    }
-
-    if (startIdx !== -1 && endIdx !== -1) {
-      cleaned = cleaned.substring(startIdx, endIdx + 1);
-    }
-    
     return JSON.parse(cleaned);
   } catch (e) {
     console.error("JSON Parse Fail:", e, text);
     return defaultValue;
+  }
+};
+
+export const checkConnection = async () => {
+  try {
+    const ai = getAIInstance();
+    await ai.models.generateContent({
+      model: FLASH_MODEL,
+      contents: "Ping",
+    });
+    return true;
+  } catch (e) {
+    console.error("AI Connection Failed:", e);
+    return false;
   }
 };
 
@@ -72,7 +67,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: mode === 'academic' ? PRO_MODEL : FLASH_MODEL,
       contents: msg,
       config: { 
         systemInstruction: instructions[mode],
@@ -92,8 +87,27 @@ export const generateExamRoadmap = async (grade: string, subject: string): Promi
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Lập lộ trình 5 bước học Lớp ${grade} môn ${subject}. Ngôn ngữ: Tiếng Việt. Trả về JSON format: {"roadmap": [{"id": "1", "title": "Tên chương", "difficulty": "theory", "topics": ["Chủ đề 1", "Chủ đề 2"]}]}`,
-      config: { responseMimeType: "application/json" }
+      contents: `Lập lộ trình 5 bước học Lớp ${grade} môn ${subject}. Ngôn ngữ: Tiếng Việt.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            roadmap: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  difficulty: { type: Type.STRING },
+                  topics: { type: Type.ARRAY, items: { type: Type.STRING } }
+                }
+              }
+            }
+          }
+        }
+      }
     });
     return parseGeminiJSON(response.text, { roadmap: [] });
   } catch (e) {
@@ -107,8 +121,22 @@ export const generateExamPaper = async (subject: string, grade: string, difficul
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Ngôn ngữ: Tiếng Việt chuẩn. Nếu có công thức toán, BẮT BUỘC dùng LaTeX trong dấu $. Trả về JSON Array: [{"question": "Nội dung câu hỏi", "options": ["A. ...", "B. ...", "C. ...", "D. ..."], "answer": "A", "explanation": "Giải thích ngắn gọn với LaTeX"}]`,
-      config: { responseMimeType: "application/json" }
+      contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Ngôn ngữ: Tiếng Việt chuẩn. Nếu có công thức toán, BẮT BUỘC dùng LaTeX trong dấu $.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              answer: { type: Type.STRING },
+              explanation: { type: Type.STRING }
+            }
+          }
+        }
+      }
     });
     const data = parseGeminiJSON(response.text, []);
     return Array.isArray(data) ? data : [];
@@ -146,8 +174,21 @@ export const getDailyBlitzQuiz = async (subject: string = "Kiến thức tổng 
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}, kiến thức cấp 3 THPT. Ngôn ngữ: Tiếng Việt. JSON: [{"question": "...", "options": ["A...", "B...", "C...", "D..."], "answer": "Đáp án đúng (chỉ ghi nội dung hoặc ký tự)"}]`,
-      config: { responseMimeType: "application/json" }
+      contents: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}, kiến thức cấp 3 THPT. Ngôn ngữ: Tiếng Việt.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              question: { type: Type.STRING },
+              options: { type: Type.ARRAY, items: { type: Type.STRING } },
+              answer: { type: Type.STRING }
+            }
+          }
+        }
+      }
     });
     return parseGeminiJSON(response.text, []);
   } catch (e) {
@@ -160,7 +201,7 @@ export const getDebateResponse = async (history: any[], topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: PRO_MODEL, // Use Pro for better reasoning
       contents: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
       config: { systemInstruction: `Bạn là một Debater Gen Z Việt Nam cực gắt, chuyên gia 'phản dame'. Chủ đề tranh biện: "${topic}". Phong cách: Sắc sảo, dùng từ ngữ giới trẻ (như 'out trình', 'ao chình', 'chấn động', 'flex'), lập luận chặt chẽ nhưng giọng điệu đời thường, không sách vở. Nhiệm vụ: Phản biện lại ý kiến người dùng một cách ngắn gọn, súc tích (dưới 100 từ).` }
     });
@@ -176,8 +217,16 @@ export const checkVibePost = async (content: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Đóng vai một học sinh Gen Z Việt Nam vui tính, lầy lội. Hãy đọc nội dung sau: "${content}". Trả về JSON chứa một câu bình luận ngắn (comment) dưới 15 từ, dùng slang tiếng Việt tự nhiên (như 'đỉnh nóc', 'chấn động', 'keo lỳ', '10 điểm', 'xỉu up xỉu down', 'ét o ét', 'mãi mận') để nhận xét về nội dung đó. JSON format: {"comment": "Nội dung bình luận"}`,
-      config: { responseMimeType: "application/json" }
+      contents: `Đóng vai một học sinh Gen Z Việt Nam vui tính, lầy lội. Hãy đọc nội dung sau: "${content}". Trả về JSON chứa một câu bình luận ngắn (comment) dưới 15 từ, dùng slang tiếng Việt tự nhiên (như 'đỉnh nóc', 'chấn động', 'keo lỳ', '10 điểm', 'xỉu up xỉu down', 'ét o ét', 'mãi mận') để nhận xét về nội dung đó.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            comment: { type: Type.STRING }
+          }
+        }
+      }
     });
     return parseGeminiJSON(res.text, {comment: "Vibe check ổn áp!"});
   } catch (e) {
@@ -191,8 +240,19 @@ export const getOracleReading = async () => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Bói bài Tarot học đường phong cách Gen Z Việt Nam hài hước. JSON format: {"cardName": "Tên lá bài (Tiếng Việt chế, vd: 'Kẻ Hủy Diệt Deadline')", "rarity": "Độ hiếm (Common/Rare/Legendary)", "message": "Lời tiên tri ngắn gọn, lầy lội, dùng teencode", "luckyItem": "Vật phẩm may mắn (đồ dùng học tập hoặc đồ ăn vặt)"}`,
-      config: { responseMimeType: "application/json" }
+      contents: `Bói bài Tarot học đường phong cách Gen Z Việt Nam hài hước.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            cardName: { type: Type.STRING },
+            rarity: { type: Type.STRING },
+            message: { type: Type.STRING },
+            luckyItem: { type: Type.STRING }
+          }
+        }
+      }
     });
     return parseGeminiJSON(res.text, {});
   } catch (e) {
@@ -221,8 +281,20 @@ export const generateFlashcards = async (text: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo bộ flashcards giúp ghi nhớ từ nội dung này. Ngôn ngữ: Tiếng Việt. JSON: [{"front": "Câu hỏi/Khái niệm", "back": "Câu trả lời/Giải thích"}]\n\nNội dung: ${text}`,
-      config: { responseMimeType: "application/json" }
+      contents: `Tạo bộ flashcards giúp ghi nhớ từ nội dung này. Ngôn ngữ: Tiếng Việt.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              front: { type: Type.STRING },
+              back: { type: Type.STRING }
+            }
+          }
+        }
+      }
     });
     return parseGeminiJSON(res.text, []);
   } catch (e) {
@@ -235,7 +307,7 @@ export const generateMindMap = async (topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: PRO_MODEL, // Pro model for better structural logic
       contents: `Tạo sơ đồ tư duy phân cấp cho chủ đề: "${topic}". Trình bày bằng Markdown sử dụng các cấp độ tiêu đề (#, ##, ###) và danh sách gạch đầu dòng lồng nhau. Hãy làm cho nó thật logic và bao quát. Ngôn ngữ: Tiếng Việt.`,
       config: { systemInstruction: "Bạn là chuyên gia về sơ đồ tư duy (Mind Map) chuyên sâu." }
     });
@@ -250,17 +322,21 @@ export const gradeEssay = async (essay: string, grade: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
+      model: PRO_MODEL, // Pro model for better critique
       contents: `Bạn là giám khảo chấm văn khó tính nhưng công tâm. Hãy chấm bài văn sau (Lớp ${grade}) theo thang điểm 10.
-      Yêu cầu trả về JSON: {
-        "score": number (ví dụ 8.5),
-        "goodPoints": ["điểm tốt 1", "điểm tốt 2"],
-        "badPoints": ["cần khắc phục 1", "cần khắc phục 2"],
-        "suggestion": "Lời khuyên tổng quát để cải thiện (dùng giọng văn khích lệ)"
-      }
-      
       Bài văn: ${essay}`,
-      config: { responseMimeType: "application/json" }
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            score: { type: Type.NUMBER },
+            goodPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
+            badPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
+            suggestion: { type: Type.STRING }
+          }
+        }
+      }
     });
     return parseGeminiJSON(res.text, { score: 0, goodPoints: [], badPoints: [], suggestion: "Lỗi chấm bài." });
   } catch (e) {
@@ -334,9 +410,26 @@ export const getOfficialExamLinks = async (s: string, y: string, p: string, g: s
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
-      contents: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm uy tín cho đề thi môn ${s} lớp ${g} năm ${y} tại ${p}. Trả về JSON: [{"web": {"title": "Tên nguồn", "uri": "https://google.com/search?q=đề+thi+${s}+${g}+${y}+${p}"}}]`,
-      config: { responseMimeType: "application/json" }
+      model: PRO_MODEL, // Use Pro for better search (simulated) or just better grounding context
+      contents: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm uy tín cho đề thi môn ${s} lớp ${g} năm ${y} tại ${p}. Trả về JSON.`,
+      config: { 
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              web: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  uri: { type: Type.STRING }
+                }
+              }
+            }
+          }
+        }
+      }
     });
     return parseGeminiJSON(res.text, []);
   } catch (e) {

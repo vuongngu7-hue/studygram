@@ -1,9 +1,8 @@
-
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { getLevelInfo, BADGES } from '../constants';
-import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem } from 'lucide-react';
-import { roastOrToast } from '../services/geminiService';
+import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { roastOrToast, checkConnection } from '../services/geminiService';
 
 const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => void; onToast: (m: string, t: 'success' | 'error') => void }> = ({ userData, onUpdate, onToast }) => {
   const level = getLevelInfo(userData.exp);
@@ -11,6 +10,7 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
   const [loading, setLoading] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminCode, setAdminCode] = useState('');
+  const [connStatus, setConnStatus] = useState<'unknown' | 'checking' | 'connected' | 'disconnected'>('unknown');
 
   const handleAIJudge = async (mode: 'roast' | 'toast') => {
     setLoading(true);
@@ -33,6 +33,13 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
     } else {
       onToast("Sai mã bí mật!", "error");
     }
+  };
+
+  const testConnection = async () => {
+    setConnStatus('checking');
+    const isOk = await checkConnection();
+    setConnStatus(isOk ? 'connected' : 'disconnected');
+    onToast(isOk ? "Kết nối AI ổn định! 🚀" : "Không kết nối được AI! Kiểm tra API Key.", isOk ? 'success' : 'error');
   };
 
   return (
@@ -64,6 +71,27 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
                 <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Win Quizzes</div>
             </div>
         </div>
+      </div>
+
+      {/* SYSTEM CHECK */}
+      <div className="mb-8 flex justify-center">
+        <button 
+          onClick={testConnection} 
+          disabled={connStatus === 'checking'}
+          className={`px-6 py-3 rounded-full flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-md ${
+            connStatus === 'connected' ? 'bg-green-100 text-green-700 border border-green-200' : 
+            connStatus === 'disconnected' ? 'bg-rose-100 text-rose-700 border border-rose-200' : 
+            'bg-slate-100 text-slate-500 hover:bg-slate-200'
+          }`}
+        >
+          {connStatus === 'checking' ? <Loader2 size={14} className="animate-spin"/> : 
+           connStatus === 'connected' ? <Wifi size={14}/> : 
+           connStatus === 'disconnected' ? <WifiOff size={14}/> : <Wifi size={14}/>}
+          
+          {connStatus === 'checking' ? 'Đang kiểm tra...' : 
+           connStatus === 'connected' ? 'AI Online' : 
+           connStatus === 'disconnected' ? 'AI Mất kết nối' : 'Kiểm tra kết nối AI'}
+        </button>
       </div>
 
       {/* BADGES COLLECTION */}
