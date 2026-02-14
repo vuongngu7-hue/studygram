@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { 
   Wand2, BookOpen, ListChecks, CalendarDays, 
@@ -6,13 +5,13 @@ import {
   Copy, Check, LayoutGrid, RotateCw, Download, FileText,
   Smile, ImageIcon, Network, ChevronDown, GraduationCap, Map,
   CheckCircle2, AlertCircle, Search, Globe, Filter,
-  Gem, Eye, Moon, PenTool, Calendar, ThumbsUp, ThumbsDown
+  Gem, Eye, Moon, PenTool, Calendar, ThumbsUp, ThumbsDown, Edit3
 } from 'lucide-react';
 import { 
   summarizeText, generateFlashcards, downloadAsFile, 
   generateMindMap,
   getOfficialExamLinks, generateExamPaper, getOracleReading,
-  gradeEssay, generateStudyPlan
+  gradeEssay, generateStudyPlan, upgradeContent
 } from '../services/geminiService';
 import MarkdownText from './MarkdownText';
 
@@ -32,6 +31,15 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
   const [oracleCard, setOracleCard] = useState<any>(null);
 
   const tools = [
+    { 
+      id: 'content_upgrader', 
+      name: 'Biên tập & Nâng cấp', 
+      desc: 'Sửa lỗi chính tả, ngữ pháp và nâng cấp diễn đạt chuyên nghiệp.', 
+      icon: Edit3, 
+      color: 'bg-violet-600',
+      gradient: 'from-violet-500 to-purple-600',
+      placeholder: 'Dán nội dung cần biên tập vào đây...'
+    },
     { 
       id: 'exam_bank', 
       name: 'Kho Đề Sở GD', 
@@ -76,15 +84,6 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       color: 'bg-emerald-500',
       gradient: 'from-emerald-500 to-green-600',
       placeholder: 'Nhập chủ đề bạn muốn lập sơ đồ...'
-    },
-    { 
-      id: 'summary', 
-      name: 'Tóm tắt bài', 
-      desc: 'Cô đọng văn bản dài thành các ý chính.', 
-      icon: ListChecks, 
-      color: 'bg-blue-500',
-      gradient: 'from-blue-500 to-indigo-600',
-      placeholder: 'Dán văn bản cần tóm tắt vào đây...'
     }
   ];
 
@@ -95,7 +94,11 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
     setExamLinks([]);
 
     try {
-      if (activeTool === 'exam_bank') {
+      if (activeTool === 'content_upgrader') {
+        const res = await upgradeContent(input);
+        setResult(res);
+        onExp(25);
+      } else if (activeTool === 'exam_bank') {
         const links = await getOfficialExamLinks(filters.subject, filters.year, filters.province, filters.grade);
         setExamLinks(links);
         onExp(10);
@@ -120,8 +123,9 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
         setResult(res);
         onExp(15);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      setResult(`Lỗi: ${error.message || 'Không thể thực hiện tác vụ này.'}`);
     } finally {
       setLoading(false);
     }
@@ -239,7 +243,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
               value={input} 
               onChange={e => setInput(e.target.value)} 
               placeholder={tools.find(t => t.id === activeTool)?.placeholder} 
-              className="w-full h-32 bg-slate-50 rounded-2xl p-4 outline-none border-2 border-transparent focus:border-indigo-100 transition-all mb-4 font-bold text-sm"
+              className="w-full h-48 bg-slate-50 rounded-2xl p-4 outline-none border-2 border-transparent focus:border-indigo-100 transition-all mb-4 font-bold text-sm leading-relaxed"
             />
             
             <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${tools.find(t => t.id === activeTool)?.gradient} hover:scale-[1.02] active:scale-95`}>
@@ -285,8 +289,8 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                  </div>
                )}
 
-               {/* KẾT QUẢ CHẤM VĂN */}
-               {activeTool === 'essay_grader' && result.score && (
+               {/* KẾT QUẢ CHẤM VĂN / BIÊN TẬP */}
+               {(activeTool === 'essay_grader' || activeTool === 'content_upgrader') && typeof result === 'object' && result.score && (
                  <div className="space-y-6">
                     <div className="flex items-center justify-between border-b border-orange-100 pb-6 mb-4">
                         <div className="flex items-center gap-4">
@@ -326,19 +330,27 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                  </div>
                )}
 
-               {/* HIỂN THỊ SƠ ĐỒ TƯ DUY / KẾ HOẠCH */}
-               {(activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary') && typeof result === 'string' && (
+               {/* HIỂN THỊ SƠ ĐỒ TƯ DUY / KẾ HOẠCH / BIÊN TẬP NỘI DUNG */}
+               {(activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary' || activeTool === 'content_upgrader') && typeof result === 'string' && (
                  <div className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-indigo-100 pb-4 mb-4">
                       <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white"><FileText size={18}/></div>
-                      <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Kết quả phân tích</h4>
+                      <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Kết quả xử lý</h4>
                     </div>
-                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner max-h-[600px] overflow-y-auto no-scrollbar">
                       <MarkdownText text={result} />
                     </div>
-                    <button onClick={() => downloadAsFile(`result_${input.slice(0,10)}.txt`, result)} className="flex items-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest mt-4 mx-auto bg-white px-4 py-2 rounded-xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-colors">
-                       <Download size={14}/> Tải về máy
-                    </button>
+                    <div className="flex gap-4">
+                        <button onClick={() => {
+                            navigator.clipboard.writeText(result);
+                            onExp(5);
+                        }} className="flex-1 flex items-center justify-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-white px-4 py-4 rounded-2xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-colors">
+                            <Copy size={14}/> Sao chép kết quả
+                        </button>
+                        <button onClick={() => downloadAsFile(`studygram_${activeTool}_${Date.now()}.txt`, result)} className="flex-1 flex items-center justify-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-white px-4 py-4 rounded-2xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-colors">
+                            <Download size={14}/> Tải về máy
+                        </button>
+                    </div>
                  </div>
                )}
             </div>

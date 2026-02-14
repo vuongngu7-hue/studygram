@@ -4,36 +4,15 @@ const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
 /**
- * Lấy API Key từ môi trường một cách an toàn.
- * Theo quy định, khóa phải đến từ process.env.API_KEY.
+ * Khởi tạo Gemini AI client theo đúng quy định.
+ * Sử dụng trực tiếp process.env.API_KEY.
  */
-const getApiKey = (): string => {
-  try {
-    // Ưu tiên truy cập trực tiếp để trình đóng gói (bundler) có thể thay thế
-    const key = process.env.API_KEY;
-    if (key) return key;
-  } catch (e) {
-    // process.env có thể không tồn tại trong một số môi trường trình duyệt
-  }
-
-  // Fallback cho môi trường Vite hoặc các biến thể khác
-  try {
-    // @ts-ignore
-    const viteKey = import.meta.env.VITE_API_KEY || import.meta.env.API_KEY;
-    if (viteKey) return viteKey;
-  } catch (e) {}
-
-  return '';
-};
-
 const getAIInstance = () => {
-  const apiKey = getApiKey();
-  
+  const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    throw new Error("Thiếu API_KEY. Vui lòng kiểm tra cấu hình biến môi trường (.env) của bạn.");
+    throw new Error("API key must be set when using the Gemini API.");
   }
-  
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: apiKey });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
@@ -82,6 +61,41 @@ export const checkConnection = async () => {
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
     return false;
+  }
+};
+
+/**
+ * Công cụ biên tập và nâng cấp nội dung chuyên sâu.
+ */
+export const upgradeContent = async (content: string) => {
+  try {
+    const ai = getAIInstance();
+    const systemInstruction = `Hãy đóng vai một chuyên gia biên tập và nâng cấp nội dung.
+Nhiệm vụ của bạn:
+1. Tự động phát hiện tất cả lỗi chính tả, ngữ pháp, dấu câu và diễn đạt chưa tự nhiên.
+2. Sửa lại cho đúng và mượt hơn.
+3. Nâng cấp nội dung theo hướng:
+   - Rõ ràng hơn
+   - Chuyên nghiệp hơn
+   - Ấn tượng hơn
+   - Có chiều sâu hơn
+
+Sau khi chỉnh sửa:
+- Hiển thị bản đã chỉnh hoàn chỉnh dưới định dạng Markdown đẹp mắt.
+- Sau đó liệt kê các lỗi đã sửa và giải thích ngắn gọn trong một bảng hoặc danh sách.`;
+
+    const res = await ai.models.generateContent({
+      model: PRO_MODEL,
+      contents: content,
+      config: { 
+        systemInstruction: systemInstruction,
+        temperature: 0.7 
+      }
+    });
+    return res.text || "Không có phản hồi từ chuyên gia biên tập.";
+  } catch (e: any) {
+    console.error("Upgrade Content Error:", e);
+    throw e;
   }
 };
 
