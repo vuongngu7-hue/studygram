@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { getLevelInfo, BADGES } from '../constants';
-import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2, AlertCircle } from 'lucide-react';
 import { roastOrToast, checkConnection } from '../services/geminiService';
 
 const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => void; onToast: (m: string, t: 'success' | 'error') => void }> = ({ userData, onUpdate, onToast }) => {
@@ -11,21 +11,21 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminCode, setAdminCode] = useState('');
   const [connStatus, setConnStatus] = useState<'unknown' | 'checking' | 'connected' | 'disconnected'>('unknown');
+  const [connMessage, setConnMessage] = useState('');
 
   const handleAIJudge = async (mode: 'roast' | 'toast') => {
     setLoading(true);
     try {
       const res = await roastOrToast(userData, mode);
       setAiOpinion(res);
-    } catch (e) {
-      setAiOpinion("AI bận rồi!");
+    } catch (e: any) {
+      setAiOpinion("Không thể kết nối AI: " + (e.message || "Lỗi lạ lắm"));
     } finally {
       setLoading(false);
     }
   };
 
   const verifyAdmin = () => {
-    // Hidden Master Key
     if (adminCode === 'SUPREME_2025' || adminCode === 'ADMIN_FIX') {
       onUpdate({ ...userData, isAdmin: true });
       setShowAdminModal(false);
@@ -37,13 +37,15 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
 
   const testConnection = async () => {
     setConnStatus('checking');
-    const isOk = await checkConnection();
-    setConnStatus(isOk ? 'connected' : 'disconnected');
+    setConnMessage("Đang ping tới Gemini...");
+    const result = await checkConnection();
+    setConnStatus(result.success ? 'connected' : 'disconnected');
+    setConnMessage(result.message);
     
-    if (isOk) {
+    if (result.success) {
       onToast("Kết nối AI ổn định! 🚀", 'success');
     } else {
-      onToast("Lỗi kết nối! Vui lòng kiểm tra lại biến môi trường API_KEY trong file .env", 'error');
+      onToast(`Lỗi: ${result.message}`, 'error');
     }
   };
 
@@ -79,7 +81,7 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
       </div>
 
       {/* SYSTEM CHECK */}
-      <div className="mb-8 flex justify-center">
+      <div className="mb-8 flex flex-col items-center gap-2">
         <button 
           onClick={testConnection} 
           disabled={connStatus === 'checking'}
@@ -95,8 +97,13 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
           
           {connStatus === 'checking' ? 'Đang kiểm tra...' : 
            connStatus === 'connected' ? 'AI Online' : 
-           connStatus === 'disconnected' ? 'AI Mất kết nối' : 'Kiểm tra kết nối AI'}
+           connStatus === 'disconnected' ? 'Kết nối thất bại' : 'Kiểm tra kết nối AI'}
         </button>
+        {connStatus === 'disconnected' && (
+            <p className="text-xs font-bold text-rose-500 bg-rose-50 px-4 py-2 rounded-xl border border-rose-100 flex items-center gap-2">
+               <AlertCircle size={14}/> {connMessage}
+            </p>
+        )}
       </div>
 
       {/* BADGES COLLECTION */}
@@ -128,8 +135,8 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => handleAIJudge('roast')} disabled={loading} className="py-4 bg-rose-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Roast me!</button>
-            <button onClick={() => handleAIJudge('toast')} disabled={loading} className="py-4 bg-indigo-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl">Toast me!</button>
+            <button onClick={() => handleAIJudge('roast')} disabled={loading} className="py-4 bg-rose-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex justify-center">{loading ? <Loader2 className="animate-spin"/> : 'Roast me!'}</button>
+            <button onClick={() => handleAIJudge('toast')} disabled={loading} className="py-4 bg-indigo-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex justify-center">{loading ? <Loader2 className="animate-spin"/> : 'Toast me!'}</button>
           </div>
         )}
       </div>

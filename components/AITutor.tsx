@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Bot, Send, Trash2, Camera, X, Zap, FastForward, UserCheck, GraduationCap, Sparkles, AlertCircle } from 'lucide-react';
 import { Message, UserProfile, QuestType } from '../types';
@@ -46,8 +45,8 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
         : await getTutorResponse(userText + promptSuffix, tutorMode);
       setMessages(prev => [...prev, { role: 'ai', text: replyText, timestamp: Date.now() }]);
       onExp(15);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'ai', text: "Lỗi kết nối AI rồi fen!", timestamp: Date.now() }]);
+    } catch (e: any) {
+      setMessages(prev => [...prev, { role: 'ai', text: `⚠️ Lỗi: ${e.message || "Mất kết nối với AI"}`, timestamp: Date.now() }]);
     } finally {
       setIsTyping(false);
     }
