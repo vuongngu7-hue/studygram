@@ -7,29 +7,30 @@ const PRO_MODEL = 'gemini-3-pro-preview';
 const getAIInstance = () => {
   let apiKey = '';
   
+  // 1. Try accessing process.env (Standard Node/Webpack/CRA)
   try {
-    // Try accessing process.env.API_KEY directly. 
-    // Bundlers (Webpack/Vite) often replace this string literal with the actual key at build time.
-    // If we wrap this in (typeof process !== 'undefined'), it might skip the replacement if the bundler 
-    // doesn't polyfill the 'process' object itself.
-    apiKey = process.env.API_KEY || '';
+    if (typeof process !== 'undefined' && process.env) {
+      apiKey = process.env.API_KEY || process.env.REACT_APP_API_KEY || '';
+    }
   } catch (e) {
-    // Ignore ReferenceError if process is not defined
+    // process is not defined
   }
 
-  // Fallback: Check import.meta.env for Vite users who might use VITE_API_KEY mapped to API_KEY
+  // 2. Fallback: Check import.meta.env (Vite)
   if (!apiKey) {
     try {
       // @ts-ignore
-      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.API_KEY) {
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
         // @ts-ignore
-        apiKey = import.meta.env.API_KEY;
+        apiKey = import.meta.env.API_KEY || import.meta.env.VITE_API_KEY || '';
       }
     } catch (e) {}
   }
 
   if (!apiKey) {
-    console.error("CRITICAL: API_KEY is missing. AI features will fail. Ensure 'API_KEY' is set in your environment variables.");
+    console.error("❌ [GeminiService] CRITICAL: API_KEY is missing.");
+    console.error("-> Ensure 'API_KEY' (or VITE_API_KEY) is set in your environment variables (.env file).");
+    console.error("-> If using Vite, prefix with VITE_ unless configured otherwise.");
   }
   
   return new GoogleGenAI({ apiKey: apiKey });
@@ -38,19 +39,17 @@ const getAIInstance = () => {
 const parseGeminiJSON = (text: string, defaultValue: any) => {
   if (!text) return defaultValue;
   try {
-    // 1. Try parsing directly
     return JSON.parse(text);
   } catch (e1) {
     try {
-      // 2. Try removing markdown code blocks
+      // Remove markdown code blocks
       let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       return JSON.parse(cleaned);
     } catch (e2) {
       try {
-        // 3. Brute force: Extract first '{' to last '}' or '[' to ']'
+        // Extract JSON substring
         const firstOpen = text.indexOf('{');
         const firstArray = text.indexOf('[');
-        
         let startIdx = -1;
         let endIdx = -1;
 
@@ -68,7 +67,7 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
         }
         return defaultValue;
       } catch (e3) {
-        console.error("JSON Parse Fail:", text);
+        console.warn("JSON Parse Fail:", text.substring(0, 50) + "...");
         return defaultValue;
       }
     }
@@ -78,13 +77,17 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
 export const checkConnection = async () => {
   try {
     const ai = getAIInstance();
+    // Simple generation to test auth and model access
     await ai.models.generateContent({
       model: FLASH_MODEL,
       contents: "Ping",
     });
+    console.log("✅ [GeminiService] Connection successful.");
     return true;
-  } catch (e) {
-    console.error("AI Connection Failed:", e);
+  } catch (e: any) {
+    console.error("❌ [GeminiService] Connection Failed:", e);
+    if (e.message?.includes('401')) console.error("-> Error 401: Unauthorized. Check your API KEY.");
+    if (e.message?.includes('404')) console.error("-> Error 404: Model not found. Check model name.");
     return false;
   }
 };
@@ -108,7 +111,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
     console.error("Tutor Error:", e);
-    return "Hic, AI đang sập nguồn (Kiểm tra API Key trong console), chờ xíu nha fen!";
+    return `Hic, AI đang sập nguồn: ${e.message || 'Lỗi không xác định'}. Kiểm tra Console nhé fen!`;
   }
 };
 
@@ -179,7 +182,6 @@ export const generateExamPaper = async (subject: string, grade: string, difficul
 export const analyzeStudyImage = async (base64Image: string, prompt: string) => {
   try {
     const ai = getAIInstance();
-    // Extract real mime type if possible, default to jpeg
     const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || 'image/jpeg';
     const base64Data = base64Image.split(',')[1];
 
@@ -231,7 +233,7 @@ export const getDebateResponse = async (history: any[], topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Use Pro for better reasoning
+      model: PRO_MODEL,
       contents: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
       config: { systemInstruction: `Bạn là một Debater Gen Z Việt Nam cực gắt, chuyên gia 'phản dame'. Chủ đề tranh biện: "${topic}". Phong cách: Sắc sảo, dùng từ ngữ giới trẻ (như 'out trình', 'ao chình', 'chấn động', 'flex'), lập luận chặt chẽ nhưng giọng điệu đời thường, không sách vở. Nhiệm vụ: Phản biện lại ý kiến người dùng một cách ngắn gọn, súc tích (dưới 100 từ).` }
     });
@@ -337,7 +339,7 @@ export const generateMindMap = async (topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Pro model for better structural logic
+      model: PRO_MODEL,
       contents: `Tạo sơ đồ tư duy phân cấp cho chủ đề: "${topic}". Trình bày bằng Markdown sử dụng các cấp độ tiêu đề (#, ##, ###) và danh sách gạch đầu dòng lồng nhau. Hãy làm cho nó thật logic và bao quát. Ngôn ngữ: Tiếng Việt.`,
       config: { systemInstruction: "Bạn là chuyên gia về sơ đồ tư duy (Mind Map) chuyên sâu." }
     });
@@ -352,7 +354,7 @@ export const gradeEssay = async (essay: string, grade: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Pro model for better critique
+      model: PRO_MODEL,
       contents: `Bạn là giám khảo chấm văn khó tính nhưng công tâm. Hãy chấm bài văn sau (Lớp ${grade}) theo thang điểm 10.
       Bài văn: ${essay}`,
       config: { 
@@ -440,7 +442,7 @@ export const getOfficialExamLinks = async (s: string, y: string, p: string, g: s
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Use Pro for better search (simulated) or just better grounding context
+      model: PRO_MODEL,
       contents: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm uy tín cho đề thi môn ${s} lớp ${g} năm ${y} tại ${p}. Trả về JSON.`,
       config: { 
         responseMimeType: "application/json",
