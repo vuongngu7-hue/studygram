@@ -6,8 +6,6 @@ const PRO_MODEL = 'gemini-3-pro-preview';
 // Initialize Gemini AI client strictly according to guidelines
 const getAIInstance = () => {
   let apiKey = '';
-  // User provided fallback key for immediate connectivity
-  const FALLBACK_KEY = 'AIzaSyAFcxaPCkftO0f6U9fxosZugd4K9wv0SVU'; 
   
   // 1. Try accessing process.env (Standard Node/Webpack/CRA)
   try {
@@ -29,16 +27,10 @@ const getAIInstance = () => {
     } catch (e) {}
   }
 
-  // 3. Fallback: Hardcoded key provided by user
-  if (!apiKey) {
-    apiKey = FALLBACK_KEY;
-    console.warn("⚠️ [GeminiService] Using fallback API KEY provided by user.");
-  }
-
   if (!apiKey) {
     console.error("❌ [GeminiService] CRITICAL: API_KEY is missing.");
     console.error("-> Ensure 'API_KEY' (or VITE_API_KEY) is set in your environment variables (.env file).");
-    console.error("-> If using Vite, prefix with VITE_ unless configured otherwise.");
+    console.error("-> The app will NOT work correctly without a valid API Key.");
   }
   
   return new GoogleGenAI({ apiKey: apiKey });
@@ -94,7 +86,7 @@ export const checkConnection = async () => {
     return true;
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
-    if (e.message?.includes('401')) console.error("-> Error 401: Unauthorized. Check your API KEY.");
+    if (e.message?.includes('401')) console.error("-> Error 401: Unauthorized. Check your API KEY in .env file.");
     if (e.message?.includes('404')) console.error("-> Error 404: Model not found. Check model name.");
     return false;
   }
