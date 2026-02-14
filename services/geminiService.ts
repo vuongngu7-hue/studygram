@@ -3,20 +3,27 @@ import { GoogleGenAI, Type } from "@google/genai";
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
+// Fallback key provided by user for immediate fix
+const FALLBACK_KEY = 'AIzaSyAFcxaPCkftO0f6U9fxosZugd4K9wv0SVU';
+
 const getAIInstance = () => {
   let apiKey = '';
   try {
-    // Attempt to access process.env.API_KEY directly.
-    // In many build tools (Vite, Webpack), this is replaced by a string literal.
-    // We wrap in try-catch to avoid ReferenceError if process is not defined at all.
-    apiKey = process.env.API_KEY;
+    // Attempt to access process.env.API_KEY
+    if (typeof process !== 'undefined' && process.env) {
+      apiKey = process.env.API_KEY || '';
+    }
   } catch (e) {
-    console.warn("[Gemini] process.env.API_KEY access failed:", e);
+    console.warn("[Gemini] process.env access failed, using fallback.");
   }
 
-  // If apiKey is still empty, throw explicit error
+  // Use fallback if env var is missing or invalid
+  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+    apiKey = FALLBACK_KEY;
+  }
+
   if (!apiKey) {
-    throw new Error("MISSING_API_KEY");
+    throw new Error("MISSING_API_KEY: Vui lòng kiểm tra cấu hình API Key.");
   }
 
   return new GoogleGenAI({ apiKey });
@@ -48,9 +55,9 @@ export const checkConnection = async () => {
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
     let msg = "Lỗi không xác định";
-    if (e.message?.includes('MISSING_API_KEY')) msg = "Thiếu API Key (.env)";
-    else if (e.message?.includes('404')) msg = "Model không tồn tại";
-    else if (e.message?.includes('403')) msg = "Sai API Key / Bị chặn";
+    if (e.message?.includes('MISSING_API_KEY')) msg = "Thiếu API Key";
+    else if (e.message?.includes('404')) msg = "Model không tồn tại (404)";
+    else if (e.message?.includes('403')) msg = "Sai API Key hoặc bị chặn (403)";
     else if (e.message?.includes('fetch')) msg = "Lỗi mạng / CORS";
     else msg = e.message;
     return { success: false, message: msg };
@@ -58,23 +65,27 @@ export const checkConnection = async () => {
 };
 
 export const upgradeContent = async (content: string) => {
-  const ai = getAIInstance();
-  const systemInstruction = `Bạn là chuyên gia biên tập nội dung.
+  try {
+    const ai = getAIInstance();
+    const systemInstruction = `Bạn là chuyên gia biên tập nội dung.
 Nhiệm vụ:
 1. Sửa lỗi chính tả, ngữ pháp, dấu câu.
 2. Nâng cấp diễn đạt cho chuyên nghiệp và ấn tượng hơn.
 3. Giữ nguyên ý nghĩa gốc.
 Trả về: Nội dung đã sửa (Markdown) + Bảng tóm tắt các thay đổi.`;
 
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
-    contents: content,
-    config: { 
-      systemInstruction: systemInstruction,
-      temperature: 0.7 
-    }
-  });
-  return res.text || "Không có phản hồi từ chuyên gia biên tập.";
+    const res = await ai.models.generateContent({
+      model: PRO_MODEL,
+      contents: content,
+      config: { 
+        systemInstruction: systemInstruction,
+        temperature: 0.7 
+      }
+    });
+    return res.text || "Không có phản hồi từ chuyên gia biên tập.";
+  } catch (e) {
+    throw e;
+  }
 };
 
 export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 'teen') => {
