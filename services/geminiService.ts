@@ -2,18 +2,26 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
+const USER_PROVIDED_KEY = 'AIzaSyCfsIsv4JT2kTKaNw-S_RqTGhYmyhg5Oug';
 
 // Initialize Gemini AI client safely
 const getAIInstance = () => {
   let apiKey = '';
+
+  // 0. Try localStorage (User Override)
+  try {
+    if (typeof localStorage !== 'undefined') {
+      apiKey = localStorage.getItem('custom_api_key') || '';
+    }
+  } catch (e) {}
   
   // 1. Try process.env (System Requirement)
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || '';
-    }
-  } catch (e) {
-    // Ignore ReferenceError
+  if (!apiKey) {
+    try {
+      if (typeof process !== 'undefined' && process.env) {
+        apiKey = process.env.API_KEY || '';
+      }
+    } catch (e) {}
   }
 
   // 2. Try import.meta.env (Vite/User Environment Fallback)
@@ -24,9 +32,12 @@ const getAIInstance = () => {
         // @ts-ignore
         apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
       }
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) {}
+  }
+
+  // 3. Fallback to hardcoded key if everything else fails
+  if (!apiKey) {
+    apiKey = USER_PROVIDED_KEY;
   }
 
   return new GoogleGenAI({ apiKey: apiKey || 'MISSING_KEY' });
@@ -77,7 +88,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
     console.error(e);
-    if (e.message?.includes('API key')) return "Lỗi API Key rồi fen! Kiểm tra file .env nhé.";
+    if (e.message?.includes('API key')) return "Lỗi API Key rồi fen! Vào Hồ sơ -> Nhập Key mới nhé.";
     return "Hic, AI đang sập nguồn, chờ xíu nha fen!";
   }
 };

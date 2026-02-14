@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo, memo } from 'react';
+import React, { useState, useMemo, memo, useEffect } from 'react';
 import { 
   Rocket, ChevronRight, Loader2, 
   ArrowLeft, GraduationCap, Zap, Info, HelpCircle,
@@ -100,21 +99,40 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
   // --- LOGIC CHẤM ĐIỂM THÔNG MINH ---
   const checkAnswer = (userSelectedText: string, question: any) => {
     if (!userSelectedText || !question || !question.answer) return false;
-    const correctRaw = question.answer.toString().trim().toUpperCase();
-    const userRaw = userSelectedText.toString().trim().toUpperCase();
     
-    // Exact match
+    // Normalize strings
+    const normalize = (s: string) => s.toString().trim().toUpperCase();
+    const correctRaw = normalize(question.answer);
+    const userRaw = normalize(userSelectedText);
+    
+    // 1. Exact match check
     if (correctRaw === userRaw) return true;
     
-    // Extract choice letter from user input (e.g., "A. Content" -> "A")
-    const userChoiceLetter = userRaw.match(/^([A-D])[\.:\)]?/)?.[1];
-    if (userChoiceLetter && userChoiceLetter === correctRaw) return true;
+    // 2. Extract option letter (A, B, C, D)
+    // Supports formats: "A", "A.", "A)", "(A)", "A: Content"
+    const extractLetter = (s: string) => {
+       const match = s.match(/(?:^|[\s\(])([A-D])(?:[\.:\)]|$)/);
+       return match ? match[1] : null;
+    };
+
+    const userLetter = extractLetter(userRaw);
+    const correctLetter = extractLetter(correctRaw);
+
+    // If both have letters, compare letters
+    if (userLetter && correctLetter) {
+        return userLetter === correctLetter;
+    }
+
+    // If correct answer is just "A" and user text is "A. Content"
+    if (correctLetter && !userLetter) {
+        if (userRaw.startsWith(correctLetter)) return true;
+    }
     
-    // Extract choice letter from question answer
-    const correctChoiceLetter = correctRaw.match(/^([A-D])[\.:\)]?/)?.[1];
-    if (userRaw === correctChoiceLetter) return true;
-    
-    // Compare full content if needed (fallback)
+    // If user answer is just "A" and correct text is "A. Content"
+    if (userLetter && !correctLetter) {
+         if (correctRaw.startsWith(userLetter)) return true;
+    }
+
     return false;
   };
 
@@ -131,8 +149,9 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
         grade: grade,
         targetDate: Date.now() + 60 * 24 * 60 * 60 * 1000,
         subject: subject,
-        roadmap: roadmapData.roadmap.map((n: any) => ({
+        roadmap: roadmapData.roadmap.map((n: any, idx: number) => ({
           ...n,
+          id: n.id || `node-${idx}`, // Ensure ID exists
           status: 'current'
         }))
       };
@@ -150,9 +169,14 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     setUserAnswers({});
     setIsReviewed(false);
     try {
-      const exam = await generateExamPaper(subject, grade, difficulty, questionCount);
+      // Use currentMission subject/grade if available, otherwise fallback to local state (though UI prevents this mismatch)
+      const targetSubject = userData.currentMission?.subject || subject;
+      const targetGrade = userData.currentMission?.grade || grade;
+      
+      const exam = await generateExamPaper(targetSubject, targetGrade, difficulty, questionCount);
       if (exam && exam.length > 0) {
         setActiveExam(exam);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         setLoadError("Không tải được câu hỏi. AI đang quá tải.");
       }
@@ -228,7 +252,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
 
         {isReviewed && (
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-[2.5rem] text-white shadow-xl animate-slide-up mb-8">
-            {/* ... Score Card UI ... */}
+            {/* Score Card UI */}
              <div className="flex justify-between items-center mb-4">
               <Zap size={48} className="opacity-50" />
               <div className="text-right">
@@ -278,7 +302,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
                     if (isReviewed) {
                        if (isRightAnswer) btnStyle = "bg-green-500 border-green-500 text-white shadow-lg";
                        else if (isThisSelected) btnStyle = "bg-rose-500 border-rose-500 text-white";
-                       else btnStyle = "bg-slate-50 border-transparent text-slate-300";
+                       else btnStyle = "bg-slate-50 border-transparent text-slate-300 opacity-50";
                     } else if (isThisSelected) {
                        btnStyle = "bg-indigo-50 border-indigo-600 text-indigo-700 scale-[1.02] shadow-md";
                     }
@@ -397,6 +421,8 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
 
   // GIAO DIỆN LỘ TRÌNH
   const mission = userData.currentMission;
+  if (!mission) return null; // Should not happen due to structure, but satisfies strict types
+
   return (
     <div className="content-container animate-in space-y-8 px-4 py-2 pb-40">
        <DailyQuestsSection quests={userData.dailyQuests} onClaim={claimQuest} />
@@ -426,13 +452,13 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
              </div>
           )}
 
-          {mission.roadmap.map((node, i) => {
+          {mission.roadmap?.map((node, i) => {
              const isLoadingThis = loadingNodeId === node.id;
              return (
                 <button 
-                  key={node.id} 
+                  key={node.id || i} 
                   disabled={loadingNodeId !== null}
-                  onClick={() => loadExam(node.id, node.difficulty)}
+                  onClick={() => loadExam(node.id || `node-${i}`, node.difficulty)}
                   className={`w-full text-left clean-card p-6 rounded-[2.5rem] flex items-center gap-6 border-2 transition-all relative overflow-hidden hover:border-indigo-300 hover:bg-indigo-50/10 shadow-lg group ${isLoadingThis ? 'border-indigo-300 bg-indigo-50 pointer-events-none' : 'border-transparent'}`}
                 >
                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white font-black shrink-0 shadow-lg transition-all bg-indigo-600 group-hover:scale-110`}>
