@@ -1,52 +1,21 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
-const USER_PROVIDED_KEY = 'AIzaSyCfsIsv4JT2kTKaNw-S_RqTGhYmyhg5Oug';
 
-// Initialize Gemini AI client safely
+// Initialize Gemini AI client strictly according to guidelines
 const getAIInstance = () => {
-  let apiKey = '';
-
-  // 0. Try localStorage (User Override)
-  try {
-    if (typeof localStorage !== 'undefined') {
-      apiKey = localStorage.getItem('custom_api_key') || '';
-    }
-  } catch (e) {}
-  
-  // 1. Try process.env (System Requirement)
+  // The API key must be obtained exclusively from the environment variable process.env.API_KEY
+  const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    try {
-      if (typeof process !== 'undefined' && process.env) {
-        apiKey = process.env.API_KEY || '';
-      }
-    } catch (e) {}
+    console.error("API_KEY is missing from process.env");
   }
-
-  // 2. Try import.meta.env (Vite/User Environment Fallback)
-  if (!apiKey) {
-    try {
-      // @ts-ignore
-      if (typeof import.meta !== 'undefined' && import.meta.env) {
-        // @ts-ignore
-        apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
-      }
-    } catch (e) {}
-  }
-
-  // 3. Fallback to hardcoded key if everything else fails
-  if (!apiKey) {
-    apiKey = USER_PROVIDED_KEY;
-  }
-
-  return new GoogleGenAI({ apiKey: apiKey || 'MISSING_KEY' });
+  return new GoogleGenAI({ apiKey: apiKey });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
   try {
     if (!text) return defaultValue;
-    // Remove markdown code blocks if present (though responseSchema prevents most)
     let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
     return JSON.parse(cleaned);
   } catch (e) {
@@ -88,8 +57,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
     console.error(e);
-    if (e.message?.includes('API key')) return "Lỗi API Key rồi fen! Vào Hồ sơ -> Nhập Key mới nhé.";
-    return "Hic, AI đang sập nguồn, chờ xíu nha fen!";
+    return "Hic, AI đang sập nguồn (Kiểm tra API Key), chờ xíu nha fen!";
   }
 };
 

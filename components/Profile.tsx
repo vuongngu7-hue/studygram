@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { getLevelInfo, BADGES } from '../constants';
-import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2, Save } from 'lucide-react';
+import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { roastOrToast, checkConnection } from '../services/geminiService';
 
 const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => void; onToast: (m: string, t: 'success' | 'error') => void }> = ({ userData, onUpdate, onToast }) => {
@@ -11,10 +11,6 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminCode, setAdminCode] = useState('');
   const [connStatus, setConnStatus] = useState<'unknown' | 'checking' | 'connected' | 'disconnected'>('unknown');
-  
-  // Custom API Key State
-  const [customKey, setCustomKey] = useState('');
-  const [showKeyInput, setShowKeyInput] = useState(false);
 
   const handleAIJudge = async (mode: 'roast' | 'toast') => {
     setLoading(true);
@@ -43,17 +39,7 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
     setConnStatus('checking');
     const isOk = await checkConnection();
     setConnStatus(isOk ? 'connected' : 'disconnected');
-    onToast(isOk ? "Kết nối AI ổn định! 🚀" : "Không kết nối được AI! Hãy nhập Key mới.", isOk ? 'success' : 'error');
-    if (!isOk) setShowKeyInput(true);
-  };
-
-  const saveCustomKey = () => {
-    if (!customKey.trim()) return;
-    localStorage.setItem('custom_api_key', customKey.trim());
-    onToast("Đã lưu API Key mới! Đang kiểm tra...", "success");
-    setCustomKey('');
-    setShowKeyInput(false);
-    testConnection();
+    onToast(isOk ? "Kết nối AI ổn định! 🚀" : "Không kết nối được AI! Vui lòng kiểm tra biến môi trường.", isOk ? 'success' : 'error');
   };
 
   return (
@@ -88,7 +74,7 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
       </div>
 
       {/* SYSTEM CHECK */}
-      <div className="mb-8 flex flex-col items-center gap-4">
+      <div className="mb-8 flex justify-center">
         <button 
           onClick={testConnection} 
           disabled={connStatus === 'checking'}
@@ -106,24 +92,6 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
            connStatus === 'connected' ? 'AI Online' : 
            connStatus === 'disconnected' ? 'AI Mất kết nối' : 'Kiểm tra kết nối AI'}
         </button>
-
-        {/* API KEY INPUT IF NEEDED */}
-        {showKeyInput && (
-          <div className="w-full max-w-sm bg-white p-4 rounded-3xl border-2 border-slate-100 animate-slide-up shadow-lg">
-             <div className="text-center mb-3">
-               <span className="text-[10px] font-black text-rose-500 uppercase">Cập nhật API Key</span>
-             </div>
-             <div className="flex gap-2">
-               <input 
-                 value={customKey}
-                 onChange={e => setCustomKey(e.target.value)}
-                 placeholder="Dán API Key mới vào đây..."
-                 className="flex-1 bg-slate-50 px-4 py-2 rounded-xl text-xs font-bold outline-none border focus:border-indigo-400"
-               />
-               <button onClick={saveCustomKey} className="bg-indigo-600 text-white p-2 rounded-xl shadow-md active:scale-95"><Save size={18}/></button>
-             </div>
-          </div>
-        )}
       </div>
 
       {/* BADGES COLLECTION */}
