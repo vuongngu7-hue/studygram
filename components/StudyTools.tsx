@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Wand2, BookOpen, ListChecks, CalendarDays, 
@@ -16,7 +17,9 @@ import {
 import MarkdownText from './MarkdownText';
 
 const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) => {
-  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const activeToolState = useState<string | null>(null);
+  const activeTool = activeToolState[0];
+  const setActiveTool = activeToolState[1];
 
   const [input, setInput] = useState('');
   const [result, setResult] = useState<any>(null);
@@ -119,7 +122,6 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       }
     } catch (error) {
       console.error(error);
-      setResult("Có lỗi xảy ra khi xử lý. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -137,8 +139,6 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
         setIsFlipped(true);
         onExp(50);
       }, 500);
-    } catch (e) {
-      console.error(e);
     } finally {
       setLoading(false);
     }

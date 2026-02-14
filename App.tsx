@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Home, Zap, Trophy, Send, Sparkles, Heart, MessageCircle, 
@@ -48,37 +49,30 @@ const App: React.FC = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        
-        // --- STREAK LOGIC REFINED ---
-        const lastLoginDate = new Date(parsed.lastLogin || 0);
-        const todayDate = new Date();
-        
-        // Reset hours to compare pure dates
-        const lastLoginMidnight = new Date(lastLoginDate.getFullYear(), lastLoginDate.getMonth(), lastLoginDate.getDate());
-        const todayMidnight = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate());
-        
-        const diffTime = todayMidnight.getTime() - lastLoginMidnight.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        // Streak Logic Check
+        const lastLogin = parsed.lastLogin ? new Date(parsed.lastLogin).toDateString() : '';
+        const today = new Date().toDateString();
         
         let welcomeMsg = "";
         
-        if (diffDays > 0) {
+        if (lastLogin !== today) {
+           const d1 = new Date(parsed.lastLogin || 0);
+           const d2 = new Date();
+           const diff = Math.floor((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24));
+           
            // New Day Reset Logic
            parsed.dailyQuests = INITIAL_QUESTS; 
            welcomeMsg = "Nhiệm vụ ngày mới đã sẵn sàng! ☀️";
            
-           if (diffDays > 1) { // Lost streak (missed more than 1 day)
+           if (diff > 1 && diff < 30000) { // Lost streak
               parsed.streak = 1;
               welcomeMsg = "Rất tiếc, bạn đã mất chuỗi Streak! Hãy bắt đầu lại!";
-           } else if (diffDays === 1) { // Consecutive day
+           } else if (diff === 1) { // Keep streak
               parsed.streak += 1;
               welcomeMsg = `Tuyệt vời! Chuỗi Streak ${parsed.streak} ngày rực lửa! 🔥`;
            }
-           // If diffDays === 0, same day, do nothing
-           
            parsed.lastLogin = Date.now();
         }
-        
         setUserData(parsed);
         if (welcomeMsg) setTimeout(() => showToast(welcomeMsg, 'success'), 1000);
       } catch (e) { console.error("Data error", e); }
