@@ -7,14 +7,29 @@ const PRO_MODEL = 'gemini-3-pro-preview';
 const getAIInstance = () => {
   let apiKey = '';
   
-  // Safely access process.env to avoid ReferenceError in non-Node environments
-  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-    apiKey = process.env.API_KEY;
+  try {
+    // Try accessing process.env.API_KEY directly. 
+    // Bundlers (Webpack/Vite) often replace this string literal with the actual key at build time.
+    // If we wrap this in (typeof process !== 'undefined'), it might skip the replacement if the bundler 
+    // doesn't polyfill the 'process' object itself.
+    apiKey = process.env.API_KEY || '';
+  } catch (e) {
+    // Ignore ReferenceError if process is not defined
   }
 
-  // If strict mode is not enforced by environment, we might check other sources or just log
+  // Fallback: Check import.meta.env for Vite users who might use VITE_API_KEY mapped to API_KEY
   if (!apiKey) {
-    console.error("CRITICAL: API_KEY is missing from process.env.API_KEY. AI features will fail.");
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.API_KEY) {
+        // @ts-ignore
+        apiKey = import.meta.env.API_KEY;
+      }
+    } catch (e) {}
+  }
+
+  if (!apiKey) {
+    console.error("CRITICAL: API_KEY is missing. AI features will fail. Ensure 'API_KEY' is set in your environment variables.");
   }
   
   return new GoogleGenAI({ apiKey: apiKey });
