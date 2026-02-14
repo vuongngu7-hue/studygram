@@ -39,10 +39,12 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
     setConnStatus('checking');
     const isOk = await checkConnection();
     setConnStatus(isOk ? 'connected' : 'disconnected');
-    onToast(
-        isOk ? "Kết nối AI ổn định! 🚀" : "Thiếu API Key! Vui lòng kiểm tra file .env", 
-        isOk ? 'success' : 'error'
-    );
+    
+    if (isOk) {
+      onToast("Kết nối AI ổn định! 🚀", 'success');
+    } else {
+      onToast("Lỗi kết nối! Vui lòng kiểm tra lại biến môi trường API_KEY trong file .env", 'error');
+    }
   };
 
   return (
