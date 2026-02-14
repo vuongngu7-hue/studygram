@@ -4,16 +4,8 @@ const FLASH_MODEL = 'gemini-3-flash-preview';
 
 // Initialize Gemini AI client safely
 const getAIInstance = () => {
-  let apiKey = '';
-  try {
-    // Safely access process.env to avoid ReferenceError in browser environments
-    if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || '';
-    }
-  } catch (e) {
-    console.error("Failed to access API key from process.env", e);
-  }
-  return new GoogleGenAI({ apiKey });
+  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
@@ -67,7 +59,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e) {
     console.error(e);
-    return "Hic, AI đang sập nguồn, chờ xíu nha fen!";
+    return "Lỗi kết nối AI rồi fen! (Kiểm tra API Key)";
   }
 };
 
