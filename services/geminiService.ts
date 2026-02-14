@@ -6,18 +6,17 @@ const PRO_MODEL = 'gemini-3-pro-preview';
 const getAIInstance = () => {
   let apiKey = '';
   try {
-    // Safely attempt to get the API key from process.env
-    // This handles environments where process might be undefined (pure browser)
-    if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || '';
-    }
+    // Attempt to access process.env.API_KEY directly.
+    // In many build tools (Vite, Webpack), this is replaced by a string literal.
+    // We wrap in try-catch to avoid ReferenceError if process is not defined at all.
+    apiKey = process.env.API_KEY;
   } catch (e) {
-    console.warn("⚠️ [GeminiService] Could not access process.env");
+    console.warn("[Gemini] process.env.API_KEY access failed:", e);
   }
 
+  // If apiKey is still empty, throw explicit error
   if (!apiKey) {
-    // Fallback error message for UI to catch
-    throw new Error("MISSING_API_KEY: Vui lòng cấu hình process.env.API_KEY trong file .env");
+    throw new Error("MISSING_API_KEY");
   }
 
   return new GoogleGenAI({ apiKey });
@@ -49,10 +48,11 @@ export const checkConnection = async () => {
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
     let msg = "Lỗi không xác định";
-    if (e.message?.includes('MISSING_API_KEY')) msg = "Thiếu API Key";
-    else if (e.message?.includes('404')) msg = "Model không tồn tại (404)";
-    else if (e.message?.includes('403')) msg = "Sai API Key hoặc bị chặn (403)";
+    if (e.message?.includes('MISSING_API_KEY')) msg = "Thiếu API Key (.env)";
+    else if (e.message?.includes('404')) msg = "Model không tồn tại";
+    else if (e.message?.includes('403')) msg = "Sai API Key / Bị chặn";
     else if (e.message?.includes('fetch')) msg = "Lỗi mạng / CORS";
+    else msg = e.message;
     return { success: false, message: msg };
   }
 };
@@ -104,7 +104,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
   } catch (e: any) {
     console.error("Tutor Error:", e);
     if (e.message?.includes('MISSING_API_KEY')) throw new Error("Chưa cấu hình API Key");
-    return `Lỗi kết nối AI: ${e.message}`;
+    throw e;
   }
 };
 
