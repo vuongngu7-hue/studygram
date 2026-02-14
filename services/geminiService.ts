@@ -4,8 +4,31 @@ const FLASH_MODEL = 'gemini-3-flash-preview';
 
 // Initialize Gemini AI client safely
 const getAIInstance = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY.
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  let apiKey = '';
+  
+  // 1. Try process.env (System Requirement)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      apiKey = process.env.API_KEY || '';
+    }
+  } catch (e) {
+    // Ignore ReferenceError
+  }
+
+  // 2. Try import.meta.env (Vite/User Environment Fallback)
+  if (!apiKey) {
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // @ts-ignore
+        apiKey = import.meta.env.VITE_GOOGLE_API_KEY || '';
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+
+  return new GoogleGenAI({ apiKey: apiKey || 'MISSING_KEY' });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
@@ -57,9 +80,10 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
       }
     });
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
-    return "Lỗi kết nối AI rồi fen! (Kiểm tra API Key)";
+    if (e.message?.includes('API key')) return "Lỗi API Key rồi fen! Kiểm tra file .env nhé.";
+    return "Hic, AI đang sập nguồn, chờ xíu nha fen!";
   }
 };
 
