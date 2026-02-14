@@ -5,22 +5,58 @@ const PRO_MODEL = 'gemini-3-pro-preview';
 
 // Initialize Gemini AI client strictly according to guidelines
 const getAIInstance = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("API_KEY is missing from process.env");
+  let apiKey = '';
+  
+  // Safely access process.env to avoid ReferenceError in non-Node environments
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    apiKey = process.env.API_KEY;
   }
+
+  // If strict mode is not enforced by environment, we might check other sources or just log
+  if (!apiKey) {
+    console.error("CRITICAL: API_KEY is missing from process.env.API_KEY. AI features will fail.");
+  }
+  
   return new GoogleGenAI({ apiKey: apiKey });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
+  if (!text) return defaultValue;
   try {
-    if (!text) return defaultValue;
-    let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (e) {
-    console.error("JSON Parse Fail:", e, text);
-    return defaultValue;
+    // 1. Try parsing directly
+    return JSON.parse(text);
+  } catch (e1) {
+    try {
+      // 2. Try removing markdown code blocks
+      let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      try {
+        // 3. Brute force: Extract first '{' to last '}' or '[' to ']'
+        const firstOpen = text.indexOf('{');
+        const firstArray = text.indexOf('[');
+        
+        let startIdx = -1;
+        let endIdx = -1;
+
+        if (firstOpen !== -1 && (firstArray === -1 || firstOpen < firstArray)) {
+           startIdx = firstOpen;
+           endIdx = text.lastIndexOf('}');
+        } else if (firstArray !== -1) {
+           startIdx = firstArray;
+           endIdx = text.lastIndexOf(']');
+        }
+
+        if (startIdx !== -1 && endIdx !== -1) {
+            const jsonStr = text.substring(startIdx, endIdx + 1);
+            return JSON.parse(jsonStr);
+        }
+        return defaultValue;
+      } catch (e3) {
+        console.error("JSON Parse Fail:", text);
+        return defaultValue;
+      }
+    }
   }
 };
 
@@ -56,8 +92,8 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     });
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
-    console.error(e);
-    return "Hic, AI đang sập nguồn (Kiểm tra API Key), chờ xíu nha fen!";
+    console.error("Tutor Error:", e);
+    return "Hic, AI đang sập nguồn (Kiểm tra API Key trong console), chờ xíu nha fen!";
   }
 };
 
