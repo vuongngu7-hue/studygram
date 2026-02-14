@@ -3,24 +3,67 @@ import { GoogleGenAI, Type } from "@google/genai";
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
-// Initialize Gemini AI client strictly according to guidelines
+// Initialize Gemini AI client robustly
 const getAIInstance = () => {
-  // The API key must be obtained exclusively from the environment variable process.env.API_KEY
-  const apiKey = process.env.API_KEY;
+  let apiKey = '';
+  
+  // 1. Try standard process.env (Webpack/Node/CRA)
+  try {
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      apiKey = process.env.API_KEY;
+    }
+  } catch (e) { /* ignore */ }
+
+  // 2. Try import.meta.env (Vite standard)
   if (!apiKey) {
-    console.error("API_KEY is missing from process.env");
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.API_KEY) {
+        // @ts-ignore
+        apiKey = import.meta.env.API_KEY;
+      }
+    } catch (e) { /* ignore */ }
   }
-  return new GoogleGenAI({ apiKey: apiKey });
+
+  if (!apiKey) {
+    console.error("CRITICAL: API_KEY is missing! Make sure to set 'API_KEY' (or 'VITE_API_KEY' mapped to it) in your environment variables.");
+  }
+  return new GoogleGenAI({ apiKey: apiKey || '' });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
+  if (!text) return defaultValue;
   try {
-    if (!text) return defaultValue;
-    let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch (e) {
-    console.error("JSON Parse Fail:", e, text);
-    return defaultValue;
+    return JSON.parse(text);
+  } catch (e1) {
+    try {
+      let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      try {
+        const firstOpen = text.indexOf('{');
+        const firstArray = text.indexOf('[');
+        let startIdx = -1;
+        let endIdx = -1;
+
+        if (firstOpen !== -1 && (firstArray === -1 || firstOpen < firstArray)) {
+           startIdx = firstOpen;
+           endIdx = text.lastIndexOf('}');
+        } else if (firstArray !== -1) {
+           startIdx = firstArray;
+           endIdx = text.lastIndexOf(']');
+        }
+
+        if (startIdx !== -1 && endIdx !== -1) {
+            const jsonStr = text.substring(startIdx, endIdx + 1);
+            return JSON.parse(jsonStr);
+        }
+        return defaultValue;
+      } catch (e3) {
+        console.error("JSON Parse Fail:", text);
+        return defaultValue;
+      }
+    }
   }
 };
 
@@ -29,7 +72,7 @@ export const checkConnection = async () => {
     const ai = getAIInstance();
     await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: "Ping",
+      contents: { role: 'user', parts: [{ text: "Ping" }] },
     });
     return true;
   } catch (e) {
@@ -48,7 +91,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: mode === 'academic' ? PRO_MODEL : FLASH_MODEL,
-      contents: msg,
+      contents: { role: 'user', parts: [{ text: msg }] },
       config: { 
         systemInstruction: instructions[mode],
         temperature: mode === 'teen' ? 0.85 : 0.4 
@@ -56,8 +99,8 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     });
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
-    console.error(e);
-    return "Hic, AI đang sập nguồn (Kiểm tra API Key), chờ xíu nha fen!";
+    console.error("Tutor Error:", e);
+    return "Hic, AI đang sập nguồn (Kiểm tra API Key trong console), chờ xíu nha fen!";
   }
 };
 
@@ -66,7 +109,7 @@ export const generateExamRoadmap = async (grade: string, subject: string): Promi
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Lập lộ trình 5 bước học Lớp ${grade} môn ${subject}. Ngôn ngữ: Tiếng Việt.`,
+      contents: { role: 'user', parts: [{ text: `Lập lộ trình 5 bước học Lớp ${grade} môn ${subject}. Ngôn ngữ: Tiếng Việt.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -100,7 +143,7 @@ export const generateExamPaper = async (subject: string, grade: string, difficul
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Ngôn ngữ: Tiếng Việt chuẩn. Nếu có công thức toán, BẮT BUỘC dùng LaTeX trong dấu $.`,
+      contents: { role: 'user', parts: [{ text: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Ngôn ngữ: Tiếng Việt chuẩn. Nếu có công thức toán, BẮT BUỘC dùng LaTeX trong dấu $.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -128,13 +171,13 @@ export const generateExamPaper = async (subject: string, grade: string, difficul
 export const analyzeStudyImage = async (base64Image: string, prompt: string) => {
   try {
     const ai = getAIInstance();
-    // Extract real mime type if possible, default to jpeg
     const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || 'image/jpeg';
     const base64Data = base64Image.split(',')[1];
 
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
       contents: {
+        role: 'user',
         parts: [
           { inlineData: { data: base64Data, mimeType: mimeType } },
           { text: prompt + " (Trả lời bằng tiếng Việt phong cách Gen Z thân thiện, ngắn gọn, dễ hiểu. Nếu có toán, dùng LaTeX $...$)" }
@@ -153,7 +196,7 @@ export const getDailyBlitzQuiz = async (subject: string = "Kiến thức tổng 
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}, kiến thức cấp 3 THPT. Ngôn ngữ: Tiếng Việt.`,
+      contents: { role: 'user', parts: [{ text: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}, kiến thức cấp 3 THPT. Ngôn ngữ: Tiếng Việt.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -180,7 +223,7 @@ export const getDebateResponse = async (history: any[], topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Use Pro for better reasoning
+      model: PRO_MODEL, 
       contents: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
       config: { systemInstruction: `Bạn là một Debater Gen Z Việt Nam cực gắt, chuyên gia 'phản dame'. Chủ đề tranh biện: "${topic}". Phong cách: Sắc sảo, dùng từ ngữ giới trẻ (như 'out trình', 'ao chình', 'chấn động', 'flex'), lập luận chặt chẽ nhưng giọng điệu đời thường, không sách vở. Nhiệm vụ: Phản biện lại ý kiến người dùng một cách ngắn gọn, súc tích (dưới 100 từ).` }
     });
@@ -196,7 +239,7 @@ export const checkVibePost = async (content: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Đóng vai một học sinh Gen Z Việt Nam vui tính, lầy lội. Hãy đọc nội dung sau: "${content}". Trả về JSON chứa một câu bình luận ngắn (comment) dưới 15 từ, dùng slang tiếng Việt tự nhiên (như 'đỉnh nóc', 'chấn động', 'keo lỳ', '10 điểm', 'xỉu up xỉu down', 'ét o ét', 'mãi mận') để nhận xét về nội dung đó.`,
+      contents: { role: 'user', parts: [{ text: `Đóng vai một học sinh Gen Z Việt Nam vui tính, lầy lội. Hãy đọc nội dung sau: "${content}". Trả về JSON chứa một câu bình luận ngắn (comment) dưới 15 từ, dùng slang tiếng Việt tự nhiên (như 'đỉnh nóc', 'chấn động', 'keo lỳ', '10 điểm', 'xỉu up xỉu down', 'ét o ét', 'mãi mận') để nhận xét về nội dung đó.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -219,7 +262,7 @@ export const getOracleReading = async () => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Bói bài Tarot học đường phong cách Gen Z Việt Nam hài hước.`,
+      contents: { role: 'user', parts: [{ text: `Bói bài Tarot học đường phong cách Gen Z Việt Nam hài hước.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -245,7 +288,7 @@ export const summarizeText = async (text: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tóm tắt nội dung sau một cách súc tích, logic và dễ hiểu nhất bằng Tiếng Việt. Sử dụng Markdown để trình bày:\n\n${text}`,
+      contents: { role: 'user', parts: [{ text: `Tóm tắt nội dung sau một cách súc tích, logic và dễ hiểu nhất bằng Tiếng Việt. Sử dụng Markdown để trình bày:\n\n${text}` }] },
       config: { systemInstruction: "Bạn là một chuyên gia tóm tắt tài liệu học thuật cho học sinh Việt Nam." }
     });
     return res.text || "Không có phản hồi từ AI.";
@@ -260,7 +303,7 @@ export const generateFlashcards = async (text: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo bộ flashcards giúp ghi nhớ từ nội dung này. Ngôn ngữ: Tiếng Việt.`,
+      contents: { role: 'user', parts: [{ text: `Tạo bộ flashcards giúp ghi nhớ từ nội dung này. Ngôn ngữ: Tiếng Việt.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -286,8 +329,8 @@ export const generateMindMap = async (topic: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Pro model for better structural logic
-      contents: `Tạo sơ đồ tư duy phân cấp cho chủ đề: "${topic}". Trình bày bằng Markdown sử dụng các cấp độ tiêu đề (#, ##, ###) và danh sách gạch đầu dòng lồng nhau. Hãy làm cho nó thật logic và bao quát. Ngôn ngữ: Tiếng Việt.`,
+      model: PRO_MODEL,
+      contents: { role: 'user', parts: [{ text: `Tạo sơ đồ tư duy phân cấp cho chủ đề: "${topic}". Trình bày bằng Markdown sử dụng các cấp độ tiêu đề (#, ##, ###) và danh sách gạch đầu dòng lồng nhau. Hãy làm cho nó thật logic và bao quát. Ngôn ngữ: Tiếng Việt.` }] },
       config: { systemInstruction: "Bạn là chuyên gia về sơ đồ tư duy (Mind Map) chuyên sâu." }
     });
     return res.text || "Không tạo được sơ đồ.";
@@ -301,9 +344,8 @@ export const gradeEssay = async (essay: string, grade: string) => {
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Pro model for better critique
-      contents: `Bạn là giám khảo chấm văn khó tính nhưng công tâm. Hãy chấm bài văn sau (Lớp ${grade}) theo thang điểm 10.
-      Bài văn: ${essay}`,
+      model: PRO_MODEL,
+      contents: { role: 'user', parts: [{ text: `Bạn là giám khảo chấm văn khó tính nhưng công tâm. Hãy chấm bài văn sau (Lớp ${grade}) theo thang điểm 10.\nBài văn: ${essay}` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {
@@ -329,9 +371,7 @@ export const generateStudyPlan = async (input: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: `Tạo một thời khóa biểu học tập hợp lý dựa trên thông tin: "${input}". 
-      Trình bày dưới dạng bảng Markdown. Bao gồm cả thời gian nghỉ ngơi (Pomodoro). 
-      Thêm lời khuyên động viên ở cuối. Ngôn ngữ: Tiếng Việt.`,
+      contents: { role: 'user', parts: [{ text: `Tạo một thời khóa biểu học tập hợp lý dựa trên thông tin: "${input}". Trình bày dưới dạng bảng Markdown. Bao gồm cả thời gian nghỉ ngơi (Pomodoro). Thêm lời khuyên động viên ở cuối. Ngôn ngữ: Tiếng Việt.` }] },
     });
     return res.text || "Không tạo được lịch.";
   } catch (e) {
@@ -362,7 +402,7 @@ export const roastOrToast = async (user: any, mode: string) => {
             
         const res = await ai.models.generateContent({
             model: FLASH_MODEL,
-            contents: prompt
+            contents: { role: 'user', parts: [{ text: prompt }] }
         });
         return res.text || (mode === 'roast' ? "Gà quá fen ơi!" : "Đỉnh chóp!");
     } catch (e) {
@@ -376,7 +416,7 @@ export const getChampionTip = async (name: string) => {
         const ai = getAIInstance();
         const res = await ai.models.generateContent({
             model: FLASH_MODEL,
-            contents: `Cho một lời khuyên học tập "bá đạo", hài hước cho bạn ${name}, phong cách Gen Z Việt Nam ngắn gọn.`
+            contents: { role: 'user', parts: [{ text: `Cho một lời khuyên học tập "bá đạo", hài hước cho bạn ${name}, phong cách Gen Z Việt Nam ngắn gọn.` }] }
         });
         return res.text;
     } catch (e) {
@@ -389,8 +429,8 @@ export const getOfficialExamLinks = async (s: string, y: string, p: string, g: s
   try {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
-      model: PRO_MODEL, // Use Pro for better search (simulated) or just better grounding context
-      contents: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm uy tín cho đề thi môn ${s} lớp ${g} năm ${y} tại ${p}. Trả về JSON.`,
+      model: PRO_MODEL,
+      contents: { role: 'user', parts: [{ text: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm uy tín cho đề thi môn ${s} lớp ${g} năm ${y} tại ${p}. Trả về JSON.` }] },
       config: { 
         responseMimeType: "application/json",
         responseSchema: {

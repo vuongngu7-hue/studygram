@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 
 interface MarkdownTextProps {
@@ -10,10 +9,18 @@ const MarkdownText: React.FC<MarkdownTextProps> = ({ text, className = "" }) => 
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (containerRef.current) {
-      // 1. Render Math using KaTeX manually on updated content
-      renderMathAndMarkdown(containerRef.current, text);
-    }
+    let animationFrameId: number;
+
+    const render = () => {
+      if (containerRef.current) {
+        renderMathAndMarkdown(containerRef.current, text);
+      }
+    };
+
+    // Use rAF to prevent blocking the main thread on heavy rendering
+    animationFrameId = requestAnimationFrame(render);
+
+    return () => cancelAnimationFrame(animationFrameId);
   }, [text]);
 
   const renderMathAndMarkdown = (container: HTMLDivElement, rawText: string) => {
@@ -56,7 +63,6 @@ const MarkdownText: React.FC<MarkdownTextProps> = ({ text, className = "" }) => 
     container.innerHTML = htmlContent;
 
     // Post-process: Find all math elements and render KaTeX
-    // We look for spans we created with class 'math-tex'
     // @ts-ignore
     if (window.katex) {
        const mathElements = container.querySelectorAll('.math-tex');
@@ -78,7 +84,6 @@ const MarkdownText: React.FC<MarkdownTextProps> = ({ text, className = "" }) => 
 
   const processInlineStyles = (str: string) => {
     // 1. Protect Math ($...$ and $$...$$) by converting to placeholders
-    // We replace them with <span class="math-tex" data-tex="..."></span>
     let out = str;
 
     // Block Math $$...$$
@@ -94,7 +99,7 @@ const MarkdownText: React.FC<MarkdownTextProps> = ({ text, className = "" }) => 
     // 2. Bold **text**
     out = out.replace(/\*\*(.*?)\*\*/g, '<strong class="font-black text-slate-900">$1</strong>');
     
-    // 3. Italic *text* (careful not to break math, but math is already hidden)
+    // 3. Italic *text*
     out = out.replace(/\*(.*?)\*/g, '<em class="text-slate-600">$1</em>');
 
     return out;
