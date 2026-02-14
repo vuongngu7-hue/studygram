@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Clock, Play, Pause, RotateCcw, Music, Youtube, Search, Zap, 
@@ -6,6 +5,7 @@ import {
   Coffee, Volume2, VolumeX, SkipForward, BarChart
 } from 'lucide-react';
 import { QuestType } from '../types';
+import { getMotivationQuote } from '../services/geminiService';
 
 const PET_STAGES = [
   { icon: '🥚', label: 'Mầm Non', color: 'from-slate-200 to-slate-400', glow: 'bg-slate-400' },
@@ -57,14 +57,23 @@ const FocusZone: React.FC<FocusZoneProps> = ({ onExp, showToast, onQuestProgress
       if (mode === 'study') setPetStage(stage);
     } else if (seconds === 0) {
       setIsActive(false);
-      onExp(mode === 'study' ? 120 : 30);
-      if (mode === 'study' && onQuestProgress) {
-        onQuestProgress('focus_time', 25); // Add 25 mins to daily quest
-      }
-      showToast(mode === 'study' ? "Tuyệt đỉnh! Rồng Thần thức tỉnh!" : "Nghỉ xong rồi!");
-      setMode(mode === 'study' ? 'break' : 'study');
-      setSeconds(mode === 'study' ? 5 * 60 : 25 * 60);
-      if (window.confetti) window.confetti({ particleCount: 200, spread: 100, origin: { y: 0.5 } });
+      
+      const finishFocus = async () => {
+        onExp(mode === 'study' ? 120 : 30);
+        if (mode === 'study') {
+            if (onQuestProgress) onQuestProgress('focus_time', 25);
+            // AI Motivation
+            const quote = await getMotivationQuote();
+            showToast(`🔥 ${quote}`);
+        } else {
+            showToast("Đã hết giờ nghỉ!");
+        }
+        setMode(mode === 'study' ? 'break' : 'study');
+        setSeconds(mode === 'study' ? 5 * 60 : 25 * 60);
+        if (window.confetti) window.confetti({ particleCount: 200, spread: 100, origin: { y: 0.5 } });
+      };
+      finishFocus();
+
     }
     return () => clearInterval(interval);
   }, [isActive, seconds]);

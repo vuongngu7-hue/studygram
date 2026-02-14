@@ -2,7 +2,7 @@ import React, { useState, useMemo, memo, useEffect } from 'react';
 import { 
   Rocket, ChevronRight, Loader2, 
   ArrowLeft, GraduationCap, Zap, Info, HelpCircle,
-  AlertTriangle, Timer, Target, CheckCircle2, Gem, ListOrdered, BarChart
+  AlertTriangle, Timer, Target, CheckCircle2, Gem, ListOrdered, BarChart, RefreshCw
 } from 'lucide-react';
 import { UserProfile, StudyMission, Grade, ExamDifficulty, QuestType, DailyQuest } from '../types';
 import { generateExamRoadmap, generateExamPaper } from '../services/geminiService';
@@ -109,7 +109,6 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     if (correctRaw === userRaw) return true;
     
     // 2. Extract option letter (A, B, C, D)
-    // Supports formats: "A", "A.", "A)", "(A)", "A: Content"
     const extractLetter = (s: string) => {
        const match = s.match(/(?:^|[\s\(])([A-D])(?:[\.:\)]|$)/);
        return match ? match[1] : null;
@@ -118,20 +117,9 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     const userLetter = extractLetter(userRaw);
     const correctLetter = extractLetter(correctRaw);
 
-    // If both have letters, compare letters
-    if (userLetter && correctLetter) {
-        return userLetter === correctLetter;
-    }
-
-    // If correct answer is just "A" and user text is "A. Content"
-    if (correctLetter && !userLetter) {
-        if (userRaw.startsWith(correctLetter)) return true;
-    }
-    
-    // If user answer is just "A" and correct text is "A. Content"
-    if (userLetter && !correctLetter) {
-         if (correctRaw.startsWith(userLetter)) return true;
-    }
+    if (userLetter && correctLetter) return userLetter === correctLetter;
+    if (correctLetter && !userLetter) if (userRaw.startsWith(correctLetter)) return true;
+    if (userLetter && !correctLetter) if (correctRaw.startsWith(userLetter)) return true;
 
     return false;
   };
@@ -142,7 +130,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     try {
       const roadmapData = await generateExamRoadmap(grade, subject);
       if (!roadmapData || !roadmapData.roadmap || roadmapData.roadmap.length === 0) {
-          throw new Error("Empty Roadmap");
+          throw new Error("Dữ liệu lộ trình bị trống.");
       }
       const newMission: StudyMission = {
         goal: 'THPTQG',
@@ -151,13 +139,13 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
         subject: subject,
         roadmap: roadmapData.roadmap.map((n: any, idx: number) => ({
           ...n,
-          id: n.id || `node-${idx}`, // Ensure ID exists
+          id: n.id || `node-${idx}`, 
           status: 'current'
         }))
       };
       onUpdate({ ...userData, currentMission: newMission });
-    } catch (e) {
-      setLoadError("Không thể tạo lộ trình lúc này. Hãy thử lại!");
+    } catch (e: any) {
+      setLoadError("Không thể tạo lộ trình. AI có thể đang bận hoặc thiếu API Key.");
     } finally {
       setLoading(false);
     }
@@ -169,7 +157,6 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     setUserAnswers({});
     setIsReviewed(false);
     try {
-      // Use currentMission subject/grade if available, otherwise fallback to local state (though UI prevents this mismatch)
       const targetSubject = userData.currentMission?.subject || subject;
       const targetGrade = userData.currentMission?.grade || grade;
       
@@ -178,7 +165,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
         setActiveExam(exam);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        setLoadError("Không tải được câu hỏi. AI đang quá tải.");
+        setLoadError("Không tải được câu hỏi.");
       }
     } catch (e) {
       setLoadError("Lỗi kết nối mạng.");
@@ -214,7 +201,6 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
       completedQuizzes: userData.completedQuizzes + 1
     });
 
-    // QUEST UPDATE
     if (scoreInfo.correct > 0) {
         onQuestProgress('quiz_correct', scoreInfo.correct);
     }
@@ -252,7 +238,6 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
 
         {isReviewed && (
           <div className="bg-gradient-to-br from-indigo-600 to-purple-700 p-8 rounded-[2.5rem] text-white shadow-xl animate-slide-up mb-8">
-            {/* Score Card UI */}
              <div className="flex justify-between items-center mb-4">
               <Zap size={48} className="opacity-50" />
               <div className="text-right">
@@ -374,7 +359,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
         </div>
 
         {loadError && (
-          <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-bold text-center border border-rose-100 animate-pulse flex items-center justify-center gap-2">
+          <div className="p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-bold text-center border border-rose-100 animate-shake flex items-center justify-center gap-2">
             <AlertTriangle size={16}/> {loadError}
           </div>
         )}
@@ -410,7 +395,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
             </div>
           </div>
 
-          <button onClick={startMission} disabled={loading} className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black shadow-2xl flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 transition-all text-lg">
+          <button onClick={startMission} disabled={loading} className="w-full py-6 bg-slate-900 text-white rounded-3xl font-black shadow-2xl flex items-center justify-center gap-3 disabled:opacity-50 active:scale-95 transition-all text-lg hover:bg-slate-800">
             {loading ? <Loader2 className="animate-spin" /> : <Rocket size={24}/>}
             {loading ? 'ĐANG TẠO...' : 'KÍCH HOẠT LỘ TRÌNH'}
           </button>
@@ -421,7 +406,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
 
   // GIAO DIỆN LỘ TRÌNH
   const mission = userData.currentMission;
-  if (!mission) return null; // Should not happen due to structure, but satisfies strict types
+  if (!mission) return null;
 
   return (
     <div className="content-container animate-in space-y-8 px-4 py-2 pb-40">
@@ -448,7 +433,9 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
           {loadError && (
              <div className="p-4 bg-rose-50 border border-rose-100 rounded-3xl flex flex-col items-center gap-2 text-rose-600 text-center animate-shake">
                <div className="flex items-center gap-2 font-bold"><AlertTriangle size={20} /> <p className="text-xs">{loadError}</p></div>
-               <button onClick={() => setLoadingNodeId(null)} className="text-[10px] uppercase font-black bg-white px-4 py-2 rounded-xl shadow-sm border border-rose-100 hover:bg-rose-50">Thử lại sau</button>
+               <button onClick={() => setLoadingNodeId(null)} className="text-[10px] uppercase font-black bg-white px-4 py-2 rounded-xl shadow-sm border border-rose-100 hover:bg-rose-50 flex items-center gap-2">
+                 <RefreshCw size={10} /> Thử lại
+               </button>
              </div>
           )}
 

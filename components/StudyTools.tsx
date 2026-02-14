@@ -16,10 +16,7 @@ import {
 import MarkdownText from './MarkdownText';
 
 const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) => {
-  const activeToolState = useState<string | null>(null);
-  const activeTool = activeToolState[0];
-  const setActiveTool = activeToolState[1];
-
+  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -29,6 +26,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
   // Oracle State
   const [isFlipped, setIsFlipped] = useState(false);
   const [oracleCard, setOracleCard] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const tools = [
     { 
@@ -92,6 +90,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
     setLoading(true);
     setResult(null);
     setExamLinks([]);
+    setError(null);
 
     try {
       if (activeTool === 'content_upgrader') {
@@ -118,14 +117,14 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
         const res = await generateMindMap(input);
         setResult(res);
         onExp(20);
-      } else if (activeTool === 'summary') {
-        const res = await summarizeText(input);
-        setResult(res);
-        onExp(15);
       }
     } catch (error: any) {
       console.error(error);
-      setResult(`Lỗi: ${error.message || 'Không thể thực hiện tác vụ này.'}`);
+      const msg = error.message?.includes('API_KEY') 
+        ? 'Thiếu API Key. Hãy kiểm tra file .env' 
+        : (error.message || 'Không thể thực hiện tác vụ này.');
+      setError(msg);
+      setResult(msg);
     } finally {
       setLoading(false);
     }
@@ -143,97 +142,102 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
         setIsFlipped(true);
         onExp(50);
       }, 500);
+    } catch (e: any) {
+       setOracleCard({ cardName: "Lỗi", rarity: "Common", message: e.message || "Lỗi kết nối", luckyItem: "F5" });
+       setTimeout(() => setIsFlipped(true), 500);
     } finally {
       setLoading(false);
     }
   };
 
+  const isErrorState = !!error || (typeof result === 'string' && result.startsWith('Lỗi'));
+  const currentTool = tools.find(t => t.id === activeTool);
+
   return (
-    <div className="space-y-8 animate-slide-up max-w-2xl mx-auto w-full pb-32">
+    <div className="space-y-8 animate-slide-up max-w-2xl mx-auto w-full pb-32 px-2">
       {/* The Academic Oracle Section */}
-      <div className="relative group overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 rounded-[3rem] animate-pulse"></div>
-        <div className="glass rounded-[3rem] p-8 border-2 border-purple-500/30 relative z-10 bg-slate-900/40 text-white">
+      <div className="relative group overflow-hidden rounded-[3rem] shadow-2xl">
+        <div className="absolute inset-0 bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 animate-pulse"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+        
+        <div className="glass p-8 relative z-10 bg-slate-900/40 text-white border-white/10">
            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                 <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)]">
-                    <Eye size={20} className="text-white" />
+              <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 bg-purple-600 rounded-2xl flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.6)]">
+                    <Eye size={24} className="text-white" />
                  </div>
                  <div>
-                    <h3 className="font-black text-lg tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-indigo-200">The Academic Oracle</h3>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-purple-300">Góc tâm linh học đường</p>
+                    <h3 className="font-black text-xl tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-purple-200 to-indigo-200">The Academic Oracle</h3>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-purple-300 opacity-80">Góc tâm linh học đường</p>
                  </div>
               </div>
               <button 
                 onClick={summonOracle}
                 disabled={loading}
-                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2 border border-purple-400/30"
               >
                 {loading ? <Loader2 size={12} className="animate-spin" /> : <Moon size={12} />}
-                {loading ? 'Đang kết nối vũ trụ...' : 'Rút bài (50 EXP)'}
+                {loading ? 'Đang kết nối...' : 'Rút bài (50 EXP)'}
               </button>
            </div>
 
            <div className="h-64 perspective-1000 flex justify-center items-center">
               {!oracleCard && !loading ? (
-                <div className="text-center opacity-50 space-y-2">
-                   <Gem size={48} className="mx-auto text-purple-400/50" />
-                   <p className="text-xs font-bold text-purple-200/50">Triệu hồi lá bài định mệnh của bạn...</p>
+                <div className="text-center opacity-40 space-y-3">
+                   <Gem size={56} className="mx-auto text-purple-300" />
+                   <p className="text-xs font-bold text-purple-200">Hãy đặt một câu hỏi trong tâm trí...</p>
                 </div>
               ) : (
                 <div className={`relative w-48 h-full transition-all duration-700 transform-style-3d cursor-pointer ${isFlipped ? 'rotate-y-180' : ''}`} onClick={() => isFlipped && setIsFlipped(!isFlipped)}>
                    <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-purple-950 rounded-2xl border-2 border-purple-500/50 flex items-center justify-center backface-hidden shadow-[0_0_30px_rgba(168,85,247,0.3)]">
-                      <div className="w-full h-full opacity-20 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]"></div>
-                      <Eye size={48} className="text-purple-400 animate-pulse absolute" />
+                      <Eye size={48} className="text-purple-400 animate-pulse" />
                    </div>
                    <div className="absolute inset-0 bg-gradient-to-b from-slate-50 to-indigo-50 rounded-2xl border-4 border-amber-300 flex flex-col items-center justify-between p-4 rotate-y-180 backface-hidden shadow-[0_0_50px_rgba(255,255,255,0.4)] overflow-hidden">
                       <div className="text-center pt-2">
                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
                            oracleCard?.rarity === 'Legendary' ? 'bg-amber-100 text-amber-600 border border-amber-200' : 'bg-slate-100 text-slate-500'
                          }`}>{oracleCard?.rarity || 'Common'}</span>
-                         <h4 className="font-black text-slate-800 text-base mt-2 leading-tight">{oracleCard?.cardName}</h4>
+                         <h4 className="font-black text-slate-800 text-base mt-2 leading-tight line-clamp-2">{oracleCard?.cardName}</h4>
                       </div>
-                      <div className="text-center flex-1 flex flex-col justify-center gap-2 my-2">
+                      <div className="text-center flex-1 flex flex-col justify-center gap-2 my-2 overflow-y-auto no-scrollbar">
                          <p className="text-xs font-bold text-indigo-900 leading-relaxed italic">"{oracleCard?.message}"</p>
                       </div>
-                      <div className="w-full bg-indigo-100/50 rounded-xl p-2 text-center">
+                      <div className="w-full bg-indigo-100/50 rounded-xl p-2 text-center mt-auto">
                          <div className="flex items-center justify-center gap-1 text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-1">
                             <Sparkles size={10} /> Lucky Item
                          </div>
-                         <p className="text-xs font-black text-indigo-600">{oracleCard?.luckyItem}</p>
+                         <p className="text-xs font-black text-indigo-600 truncate">{oracleCard?.luckyItem}</p>
                       </div>
                    </div>
                 </div>
               )}
            </div>
-           
-           <style>{`
-             .perspective-1000 { perspective: 1000px; }
-             .transform-style-3d { transform-style: preserve-3d; }
-             .backface-hidden { backface-visibility: hidden; }
-             .rotate-y-180 { transform: rotateY(180deg); }
-           `}</style>
+           <style>{`.perspective-1000 { perspective: 1000px; } .transform-style-3d { transform-style: preserve-3d; } .backface-hidden { backface-visibility: hidden; } .rotate-y-180 { transform: rotateY(180deg); }`}</style>
         </div>
       </div>
 
       {activeTool ? (
         <div className="animate-slide-in">
-          <button onClick={() => { setActiveTool(null); setResult(null); setInput(''); setExamLinks([]); }} className="flex items-center gap-2 text-slate-400 hover:text-indigo-600 mb-6 font-black text-[10px] uppercase tracking-widest transition-colors"><ArrowLeft size={16} /> Quay lại</button>
+          <button onClick={() => { setActiveTool(null); setResult(null); setInput(''); setExamLinks([]); setError(null); }} className="flex items-center gap-2 text-slate-400 hover:text-indigo-600 mb-6 font-black text-[10px] uppercase tracking-widest transition-colors bg-white px-4 py-2 rounded-full w-fit shadow-sm"><ArrowLeft size={14} /> Quay lại</button>
           
           <div className="glass rounded-[3rem] p-8 mb-8 border-2 border-white shadow-xl bg-white/60">
-            <h3 className="font-black text-xl mb-6 text-slate-800 flex items-center gap-3">
-              {tools.find(t => t.id === activeTool)?.name}
+            <h3 className="font-black text-2xl mb-2 text-slate-800 flex items-center gap-3">
+               <div className={`p-2 rounded-xl text-white ${currentTool?.color}`}>
+                  {currentTool && <currentTool.icon size={24} />}
+               </div>
+               {currentTool?.name}
             </h3>
+            <p className="text-slate-500 font-bold text-sm mb-6 pl-14">{currentTool?.desc}</p>
 
             {(activeTool === 'exam_bank' || activeTool === 'quiz_creator' || activeTool === 'essay_grader') && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <select value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} className="bg-slate-50 p-4 rounded-2xl font-black text-xs outline-none border-2 border-transparent focus:border-indigo-100">
+                <select value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
                   {['2024', '2023', '2022', '2021', '2020'].map(y => <option key={y} value={y}>Năm {y}</option>)}
                 </select>
-                <select value={filters.subject} onChange={e => setFilters({...filters, subject: e.target.value})} className="bg-slate-50 p-4 rounded-2xl font-black text-xs outline-none border-2 border-transparent focus:border-indigo-100">
+                <select value={filters.subject} onChange={e => setFilters({...filters, subject: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
                   {['Toán học', 'Ngữ văn', 'Tiếng Anh', 'Vật lý', 'Hóa học', 'Sinh học', 'Lịch sử', 'Địa lý'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select value={filters.grade} onChange={e => setFilters({...filters, grade: e.target.value})} className="bg-slate-50 p-4 rounded-2xl font-black text-xs outline-none border-2 border-transparent focus:border-indigo-100">
+                <select value={filters.grade} onChange={e => setFilters({...filters, grade: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
                   {['10', '11', '12'].map(g => <option key={g} value={g}>Lớp {g}</option>)}
                 </select>
               </div>
@@ -242,32 +246,42 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
             <textarea 
               value={input} 
               onChange={e => setInput(e.target.value)} 
-              placeholder={tools.find(t => t.id === activeTool)?.placeholder} 
-              className="w-full h-48 bg-slate-50 rounded-2xl p-4 outline-none border-2 border-transparent focus:border-indigo-100 transition-all mb-4 font-bold text-sm leading-relaxed"
+              placeholder={currentTool?.placeholder} 
+              className="w-full h-48 bg-slate-50 rounded-2xl p-5 outline-none border-2 border-transparent focus:border-indigo-200 focus:bg-white transition-all mb-4 font-bold text-sm leading-relaxed placeholder:text-slate-300 resize-none"
             />
             
-            <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${tools.find(t => t.id === activeTool)?.gradient} hover:scale-[1.02] active:scale-95`}>
+            <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${currentTool?.gradient} hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:scale-100`}>
                {loading ? <RotateCw className="animate-spin"/> : <Sparkles size={20}/>} {loading ? 'AI đang xử lý...' : 'KÍCH HOẠT CÔNG CỤ'}
             </button>
           </div>
 
-          {(result || examLinks.length > 0) && (
+          {(result || examLinks.length > 0 || isErrorState) && (
             <div className="glass rounded-[3.5rem] p-8 border-2 border-white shadow-2xl animate-slide-up bg-white/80">
-               {activeTool === 'exam_bank' && (
+               
+               {/* ERROR DISPLAY */}
+               {isErrorState && (
+                  <div className="p-6 bg-rose-50 border border-rose-100 rounded-[2rem] text-center animate-shake">
+                      <AlertCircle size={32} className="mx-auto text-rose-500 mb-2"/>
+                      <h4 className="font-black text-rose-600 text-sm uppercase tracking-wider mb-1">Gặp sự cố</h4>
+                      <p className="text-xs font-bold text-rose-400">{error || result}</p>
+                  </div>
+               )}
+
+               {!isErrorState && activeTool === 'exam_bank' && (
                  <div className="space-y-4">
                     <h4 className="font-black text-indigo-600 text-[10px] uppercase tracking-widest mb-4 flex items-center gap-2">KẾT QUẢ TỪ CƠ SỞ DỮ LIỆU SỞ GD</h4>
                     {examLinks.map((link, i) => (
                       <a key={i} href={link.web?.uri} target="_blank" rel="noreferrer" className="block p-5 bg-white border border-slate-100 rounded-3xl hover:border-indigo-400 hover:shadow-lg transition-all group">
                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-sm text-slate-700 group-hover:text-indigo-600">{link.web?.title || "Tài liệu đề thi"}</span>
-                            <Globe size={18} className="text-slate-300 group-hover:text-indigo-600" />
+                            <span className="font-bold text-sm text-slate-700 group-hover:text-indigo-600 line-clamp-1">{link.web?.title || "Tài liệu đề thi"}</span>
+                            <Globe size={18} className="text-slate-300 group-hover:text-indigo-600 shrink-0" />
                          </div>
                       </a>
                     ))}
                  </div>
                )}
 
-               {activeTool === 'quiz_creator' && Array.isArray(result) && (
+               {!isErrorState && activeTool === 'quiz_creator' && Array.isArray(result) && (
                  <div className="space-y-8">
                     {result.map((q, i) => (
                       <div key={i} className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-100 relative shadow-inner">
@@ -276,7 +290,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                          </p>
                          <div className="grid grid-cols-1 gap-2">
                             {q.options.map((opt: string, idx: number) => (
-                              <button key={idx} className="p-4 bg-white border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600">
+                              <button key={idx} className="p-4 bg-white border border-slate-100 rounded-2xl text-left text-xs font-bold text-slate-600 hover:bg-indigo-50 transition-colors">
                                  <MarkdownText text={opt} />
                               </button>
                             ))}
@@ -290,7 +304,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                )}
 
                {/* KẾT QUẢ CHẤM VĂN / BIÊN TẬP */}
-               {(activeTool === 'essay_grader' || activeTool === 'content_upgrader') && typeof result === 'object' && result.score && (
+               {!isErrorState && (activeTool === 'essay_grader' || activeTool === 'content_upgrader') && typeof result === 'object' && result.score && (
                  <div className="space-y-6">
                     <div className="flex items-center justify-between border-b border-orange-100 pb-6 mb-4">
                         <div className="flex items-center gap-4">
@@ -330,14 +344,14 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                  </div>
                )}
 
-               {/* HIỂN THỊ SƠ ĐỒ TƯ DUY / KẾ HOẠCH / BIÊN TẬP NỘI DUNG */}
-               {(activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary' || activeTool === 'content_upgrader') && typeof result === 'string' && (
+               {/* HIỂN THỊ SƠ ĐỒ TƯ DUY / KẾ HOẠCH / BIÊN TẬP NỘI DUNG (STRING RESULT) */}
+               {!isErrorState && (activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary' || activeTool === 'content_upgrader') && typeof result === 'string' && (
                  <div className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-indigo-100 pb-4 mb-4">
                       <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white"><FileText size={18}/></div>
                       <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Kết quả xử lý</h4>
                     </div>
-                    <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-100 shadow-inner max-h-[600px] overflow-y-auto no-scrollbar">
+                    <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner max-h-[600px] overflow-y-auto no-scrollbar">
                       <MarkdownText text={result} />
                     </div>
                     <div className="flex gap-4">

@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useCallback, memo } from 'react';
-import { Plus, Heart, Sparkles, MessageSquare, X, Send, ShieldCheck, Share2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback, memo, useRef } from 'react';
+import { Plus, Heart, Sparkles, MessageSquare, X, Send, ShieldCheck, Share2, Loader2 } from 'lucide-react';
 import { Post, UserProfile, PostType } from '../types';
 import { checkVibePost, suggestHashtags } from '../services/geminiService';
 import MarkdownText from './MarkdownText';
@@ -10,6 +10,10 @@ const Feed: React.FC<{ userData: UserProfile; onExp: (n: number) => void; showTo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<PostType | 'all'>('all');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Optimization: Lazy Loading / Infinite Scroll
+  const [visibleCount, setVisibleCount] = useState(8);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('studygram_posts');
@@ -35,6 +39,26 @@ const Feed: React.FC<{ userData: UserProfile; onExp: (n: number) => void; showTo
     }
   }, []);
 
+  // Infinite Scroll Logic
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(prev => prev + 5);
+      }
+    }, { rootMargin: '200px' });
+
+    if (loadMoreRef.current) observer.observe(loadMoreRef.current);
+
+    return () => {
+      if (loadMoreRef.current) observer.unobserve(loadMoreRef.current);
+    };
+  }, [loadMoreRef, activeTab]); // Dependencies ensure observer is recreated if ref changes (rare) or logic changes
+
+  // Reset pagination on tab change
+  useEffect(() => {
+    setVisibleCount(8);
+  }, [activeTab]);
+
   const handleAddPost = async (content: string) => {
     setIsAnalyzing(true);
     try {
@@ -50,6 +74,8 @@ const Feed: React.FC<{ userData: UserProfile; onExp: (n: number) => void; showTo
       localStorage.setItem('studygram_posts', JSON.stringify(updated));
       onExp(25);
       setIsModalOpen(false);
+      // Scroll to top when adding new post
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsAnalyzing(false);
     }
@@ -76,6 +102,8 @@ const Feed: React.FC<{ userData: UserProfile; onExp: (n: number) => void; showTo
   }, [userData]);
 
   const filteredPosts = posts.filter(p => activeTab === 'all' || p.type === activeTab);
+  const visiblePosts = filteredPosts.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredPosts.length;
 
   return (
     <div className="space-y-6 animate-slide-up max-w-2xl mx-auto pb-40 px-1">
@@ -84,16 +112,35 @@ const Feed: React.FC<{ userData: UserProfile; onExp: (n: number) => void; showTo
         <span className="text-slate-400 font-bold">Hôm nay fen học được gì hay?...</span>
       </div>
 
-      <div className="flex gap-2 p-1.5 bg-white/60 backdrop-blur-md rounded-full w-fit border border-white/50 shadow-sm">
+      <div className="flex gap-2 p-1.5 bg-white/60 backdrop-blur-md rounded-full w-fit border border-white/50 shadow-sm sticky top-24 z-20">
         {['all', 'knowledge', 'meme', 'event'].map(t => (
           <button key={t} onClick={() => setActiveTab(t as any)} className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${activeTab === t ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}>{t === 'all' ? 'Feed' : t}</button>
         ))}
       </div>
 
-      <div className="space-y-6">
-        {filteredPosts.map(post => (
+      <div className="space-y-6 min-h-[50vh]">
+        {visiblePosts.map(post => (
           <PostCard key={post.id} post={post} userData={userData} onLike={handleLike} onComment={handleComment} showToast={showToast} />
         ))}
+        
+        {/* Infinite Scroll Trigger */}
+        {hasMore && (
+            <div ref={loadMoreRef} className="py-8 flex justify-center items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-widest animate-pulse">
+                <Loader2 className="animate-spin" size={16} /> Đang tải thêm...
+            </div>
+        )}
+        
+        {!hasMore && filteredPosts.length > 5 && (
+            <div className="py-8 text-center text-slate-300 text-[10px] font-black uppercase tracking-[0.2em]">
+                Đã hiển thị toàn bộ bài viết
+            </div>
+        )}
+
+        {filteredPosts.length === 0 && (
+            <div className="py-20 text-center opacity-50">
+                <p className="text-slate-400 font-black uppercase tracking-widest">Chưa có bài viết nào</p>
+            </div>
+        )}
       </div>
 
       {isModalOpen && <CreatePostModal onClose={() => setIsModalOpen(false)} onSubmit={handleAddPost} isAnalyzing={isAnalyzing} />}
@@ -193,3 +240,4 @@ const CreatePostModal = ({ onClose, onSubmit, isAnalyzing }: any) => {
 };
 
 export default Feed;
+    
