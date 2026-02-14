@@ -4,13 +4,41 @@ const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
 /**
- * Khởi tạo Gemini AI client theo đúng quy định.
- * Sử dụng trực tiếp process.env.API_KEY.
+ * Safely retrieve API Key from various environment configurations.
+ * Prioritizes process.env.API_KEY as per guidelines, but falls back safely.
  */
+const getApiKey = (): string => {
+  let key = '';
+  
+  // 1. Try process.env (Standard Node/Webpack/CRA)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      key = process.env.API_KEY || process.env.REACT_APP_API_KEY || '';
+    }
+  } catch (e) {
+    // process is not defined in this environment
+  }
+
+  // 2. Fallback: Check import.meta.env (Vite) if key is still missing
+  if (!key) {
+    try {
+      // @ts-ignore
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        // @ts-ignore
+        key = import.meta.env.VITE_API_KEY || import.meta.env.API_KEY || '';
+      }
+    } catch (e) {
+      // import.meta is not defined
+    }
+  }
+
+  return key;
+};
+
 const getAIInstance = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("API key must be set when using the Gemini API.");
+    throw new Error("API key must be set when using the Gemini API. Please check your .env file.");
   }
   return new GoogleGenAI({ apiKey: apiKey });
 };
@@ -95,7 +123,7 @@ Sau khi chỉnh sửa:
     return res.text || "Không có phản hồi từ chuyên gia biên tập.";
   } catch (e: any) {
     console.error("Upgrade Content Error:", e);
-    throw e;
+    return `Lỗi: ${e.message}. Vui lòng kiểm tra API Key.`;
   }
 };
 
@@ -118,7 +146,7 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
     console.error("Tutor Error:", e);
-    return `Hic, AI đang sập nguồn: ${e.message.includes('API key') ? 'Chưa cấu hình API_KEY trong môi trường (.env)' : e.message}. Kiểm tra Console nhé fen!`;
+    return `Hic, AI đang sập nguồn: ${e.message}. Kiểm tra Console nhé fen!`;
   }
 };
 
