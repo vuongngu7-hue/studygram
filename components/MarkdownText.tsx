@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef } from 'react';
 
 interface MarkdownTextProps {
@@ -64,13 +63,19 @@ const MarkdownText: React.FC<MarkdownTextProps> = ({ text, className = "" }) => 
          try {
             const tex = elem.getAttribute('data-tex') || '';
             const isDisplay = elem.getAttribute('data-display') === 'true';
+            
+            // FIX: Use renderToString to avoid Quirks Mode check which katex.render enforces.
             // @ts-ignore
-            window.katex.render(tex, elem, {
+            const html = window.katex.renderToString(tex, {
               throwOnError: false,
               displayMode: isDisplay
             });
+            elem.innerHTML = html;
          } catch (e) {
            console.error("KaTeX error", e);
+           // Fallback: show raw tex if error
+           elem.textContent = elem.getAttribute('data-tex') || '';
+           elem.className += " text-rose-500 font-mono text-xs";
          }
        });
     }

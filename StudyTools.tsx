@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Wand2, BookOpen, ListChecks, CalendarDays, 
@@ -148,6 +149,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
     }
   };
 
+  const isErrorState = !!error || (typeof result === 'string' && result.startsWith('Lỗi'));
   const currentTool = tools.find(t => t.id === activeTool);
 
   return (
@@ -249,85 +251,6 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
             <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${currentTool?.gradient} hover:scale-[1.01] active:scale-95 disabled:opacity-50`}>
                {loading ? <RotateCw className="animate-spin"/> : <Sparkles size={20}/>} {loading ? 'AI đang xử lý...' : 'KÍCH HOẠT CÔNG CỤ'}
             </button>
-            
-            {error && (
-              <div className="mt-4 p-4 bg-rose-50 text-rose-600 rounded-2xl text-xs font-bold border border-rose-100 flex items-center gap-2">
-                 <AlertCircle size={16}/> {error}
-              </div>
-            )}
           </div>
 
-          {(result || examLinks.length > 0) && (
-            <div className="animate-slide-up space-y-4">
-               {activeTool === 'exam_bank' ? (
-                  <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-lg">
-                     <h4 className="font-black text-slate-800 mb-4 flex items-center gap-2"><Globe size={18} className="text-indigo-600"/> Kết quả tìm kiếm</h4>
-                     <div className="space-y-3">
-                        {examLinks.map((link, i) => (
-                           <a key={i} href={link.uri} target="_blank" rel="noreferrer" className="block p-4 bg-slate-50 rounded-2xl hover:bg-indigo-50 transition-all group">
-                              <div className="font-bold text-sm text-indigo-700 mb-1 group-hover:underline">{link.title}</div>
-                              <div className="text-[10px] text-slate-400 truncate">{link.uri}</div>
-                           </a>
-                        ))}
-                        {examLinks.length === 0 && <p className="text-sm text-slate-500 italic">Không tìm thấy đề thi phù hợp.</p>}
-                     </div>
-                  </div>
-               ) : activeTool === 'quiz_creator' && Array.isArray(result) ? (
-                  <div className="bg-white rounded-[2rem] p-6 border border-slate-100 shadow-lg space-y-6">
-                     <div className="flex justify-between items-center">
-                        <h4 className="font-black text-slate-800">Đề thi đã tạo ({result.length} câu)</h4>
-                        <button onClick={() => downloadAsFile('quiz.txt', JSON.stringify(result, null, 2))} className="text-indigo-600 font-bold text-xs flex items-center gap-1"><Download size={14}/> Lưu JSON</button>
-                     </div>
-                     {result.map((q: any, i: number) => (
-                        <div key={i} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                           <p className="font-bold text-slate-700 mb-3"><span className="text-indigo-600">Câu {i+1}:</span> {q.question}</p>
-                           <div className="grid grid-cols-1 gap-2 pl-4">
-                              {q.options?.map((opt: string, idx: number) => (
-                                 <div key={idx} className={`text-sm ${opt === q.answer ? 'text-green-600 font-bold' : 'text-slate-500'}`}>
-                                    {String.fromCharCode(65+idx)}. {opt}
-                                 </div>
-                              ))}
-                           </div>
-                           <div className="mt-3 text-xs bg-indigo-100/50 p-3 rounded-xl text-indigo-800 italic">
-                              💡 {q.explanation}
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               ) : (
-                  <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-lg relative overflow-hidden">
-                     <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-black text-slate-800 flex items-center gap-2"><Sparkles size={18} className="text-amber-500"/> Kết quả AI</h4>
-                        <button onClick={() => { navigator.clipboard.writeText(typeof result === 'string' ? result : JSON.stringify(result)); }} className="text-slate-400 hover:text-indigo-600"><Copy size={18}/></button>
-                     </div>
-                     <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium">
-                        {typeof result === 'string' ? <MarkdownText text={result} /> : <pre className="whitespace-pre-wrap font-mono text-xs bg-slate-50 p-4 rounded-xl">{JSON.stringify(result, null, 2)}</pre>}
-                     </div>
-                  </div>
-               )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-           {tools.map(tool => (
-              <button 
-                key={tool.id} 
-                onClick={() => setActiveTool(tool.id)}
-                className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left group relative overflow-hidden"
-              >
-                 <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 bg-gradient-to-br ${tool.gradient} group-hover:scale-150 transition-transform duration-500`}></div>
-                 <div className={`w-14 h-14 rounded-[1.2rem] flex items-center justify-center text-white shadow-lg mb-4 bg-gradient-to-br ${tool.gradient}`}>
-                    <tool.icon size={26} />
-                 </div>
-                 <h4 className="font-black text-slate-800 text-sm mb-1">{tool.name}</h4>
-                 <p className="text-[10px] font-bold text-slate-400 leading-tight">{tool.desc}</p>
-              </button>
-           ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default StudyTools;
+          {(result || examLinks.length > 0

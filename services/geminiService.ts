@@ -1,12 +1,46 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const FLASH_MODEL = 'gemini-3-flash-preview';
-const PRO_MODEL = 'gemini-3-pro-preview';
+// Sử dụng model miễn phí/experimental mạnh mẽ nhất hiện tại
+const PRIMARY_FLASH_MODEL = 'gemini-2.0-flash-exp';
+const PRIMARY_PRO_MODEL = 'gemini-2.0-flash-exp';
 
-// Khởi tạo AI Instance theo hướng dẫn mới nhất
+// Model dự phòng
+const FALLBACK_MODEL = 'gemini-2.0-flash-exp';
+
+let activeFlashModel = PRIMARY_FLASH_MODEL;
+let activeProModel = PRIMARY_PRO_MODEL;
+
 const getAIInstance = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("MISSING_KEY");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
+/**
+ * Wrapper an toàn để gọi AI.
+ * Nếu model chính lỗi "Not Found" (404), tự động thử lại bằng model dự phòng.
+ */
+const safeGenerateContent = async (ai: GoogleGenAI, params: any, isPro = false) => {
+  try {
+    const model = isPro ? activeProModel : activeFlashModel;
+    return await ai.models.generateContent({ ...params, model });
+  } catch (error: any) {
+    // Nếu lỗi do Model không tồn tại hoặc không truy cập được (404/400)
+    if (error.message?.includes("not found") || error.message?.includes("404") || error.message?.includes("not supported")) {
+      console.warn(`Model ${isPro ? activeProModel : activeFlashModel} failed. Switching to fallback: ${FALLBACK_MODEL}`);
+      
+      // Cập nhật model active để các request sau dùng luôn fallback
+      if (isPro) activeProModel = FALLBACK_MODEL;
+      else activeFlashModel = FALLBACK_MODEL;
+
+      // Thử lại với fallback
+      return await ai.models.generateContent({ ...params, model: FALLBACK_MODEL });
+    }
+    throw error;
+  }
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
@@ -15,10 +49,33 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
     return JSON.parse(text);
   } catch (e1) {
     try {
-      let cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/, '').trim();
+      let cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
       return JSON.parse(cleaned);
     } catch (e2) {
-      return defaultValue;
+      try {
+        const firstOpenBrace = text.indexOf('{');
+        const lastCloseBrace = text.lastIndexOf('}');
+        const firstOpenBracket = text.indexOf('[');
+        const lastCloseBracket = text.lastIndexOf(']');
+        
+        let start = -1; 
+        let end = -1;
+
+        if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
+            start = firstOpenBrace;
+            end = lastCloseBrace;
+        } else if (firstOpenBracket !== -1) {
+            start = firstOpenBracket;
+            end = lastCloseBracket;
+        }
+
+        if (start !== -1 && end !== -1 && end > start) {
+            return JSON.parse(text.substring(start, end + 1));
+        }
+        return defaultValue;
+      } catch (e3) {
+        return defaultValue;
+      }
     }
   }
 };
@@ -26,355 +83,228 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
 export const checkConnection = async () => {
   try {
     const ai = getAIInstance();
-    await ai.models.generateContent({
-      model: FLASH_MODEL,
-      contents: "Hi",
-    });
-    return { success: true, message: "Kết nối ổn định" };
+    // Thử kết nối
+    await safeGenerateContent(ai, { contents: "Ping" });
+    return { success: true, message: `Đã kết nối (${activeFlashModel})` };
   } catch (e: any) {
-    console.error("❌ [GeminiService] Connection Failed:", e);
-    return { success: false, message: e.message || "Lỗi kết nối" };
+    console.error("Connection Check Failed:", e);
+    if (e.message === "MISSING_KEY") return { success: false, message: "Chưa nhập API Key" };
+    return { success: false, message: e.message || "Lỗi kết nối mạng" };
   }
 };
 
-// --- CHATBOT FEATURE (PRO MODEL) ---
-export const getChatResponse = async (message: string, history: any[] = []) => {
+export const getChatResponse = async (message: string, history: any[], systemInstruction?: string) => {
   const ai = getAIInstance();
-  const chat = ai.chats.create({
-    model: PRO_MODEL,
-    config: {
-      systemInstruction: 'Bạn là StudyGram AI, một trợ lý học tập thông minh và thân thiện dành cho học sinh Việt Nam. Bạn có khả năng tư duy logic cực cao, giải quyết các bài tập khó và đưa ra lời khuyên học tập sâu sắc.',
-      temperature: 0.8,
+  const defaultInstruction = 'Bạn là StudyGram AI, trợ lý học tập thông minh.';
+  
+  const chatConfig = {
+    model: activeProModel, 
+    history: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
+    config: { 
+      temperature: 0.8, 
+      systemInstruction: systemInstruction || defaultInstruction 
     }
-  });
+  };
 
-  // Chuyển đổi lịch sử chat sang định dạng của Gemini
-  // Lưu ý: Gemini API chats.create hiện tại hỗ trợ gửi tin nhắn trực tiếp qua sendMessage
-  const response = await chat.sendMessage({ message });
-  return response.text;
+  try {
+    const chat = ai.chats.create(chatConfig);
+    const res = await chat.sendMessage({ message });
+    return res.text;
+  } catch (error: any) {
+     if (error.message?.includes("not found") || error.message?.includes("404")) {
+        activeProModel = FALLBACK_MODEL;
+        const fallbackChat = ai.chats.create({
+            ...chatConfig,
+            model: FALLBACK_MODEL
+        });
+        const res = await fallbackChat.sendMessage({ message });
+        return res.text;
+     }
+     throw error;
+  }
 };
 
-// --- SEARCH GROUNDING FEATURE (FLASH MODEL + SEARCH TOOL) ---
 export const searchEducationalResources = async (query: string) => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tìm kiếm và liệt kê 5 nguồn tài liệu uy tín nhất cho: ${query}. Trình bày ngắn gọn và khách quan.`,
-    config: {
-      tools: [{ googleSearch: {} }],
-    },
-  });
-
-  const text = response.text;
-  const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
-  
-  // Trích xuất URLs từ groundingChunks
-  const links = sources
-    .filter((chunk: any) => chunk.web && chunk.web.uri)
-    .map((chunk: any) => ({
-      title: chunk.web.title,
-      uri: chunk.web.uri
-    }));
-
-  return { text, links };
+  try {
+      const response = await ai.models.generateContent({
+        model: PRIMARY_FLASH_MODEL, 
+        contents: `Tìm 5 nguồn tài liệu học tập uy tín cho: ${query}.`,
+        config: { tools: [{ googleSearch: {} }] },
+      });
+      const text = response.text;
+      const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+      const links = sources.filter((chunk: any) => chunk.web && chunk.web.uri).map((chunk: any) => ({ title: chunk.web.title, uri: chunk.web.uri }));
+      return { text, links };
+  } catch (e) {
+      const res = await safeGenerateContent(ai, {
+          contents: `Gợi ý 5 nguồn tài liệu hoặc từ khóa tìm kiếm cho: ${query}`
+      });
+      return { text: res.text, links: [] };
+  }
 };
 
 export const upgradeContent = async (content: string) => {
   const ai = getAIInstance();
-  const systemInstruction = `Bạn là chuyên gia biên tập nội dung chuyên nghiệp. Hãy nâng cấp văn bản sau lên tầm cao mới, sửa lỗi và làm cho nó ấn tượng hơn. Trả về kết quả bằng Markdown.`;
-
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
+  const res = await safeGenerateContent(ai, {
     contents: content,
-    config: { systemInstruction, temperature: 0.7 }
-  });
-  return res.text || "Không có phản hồi.";
-};
-
-export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' | 'pro' = 'teen') => {
-  const instructions = {
-    teen: `Bạn là Gia sư AI Gen Z lầy lội, dùng slang (fen, khum, kẹ kẹ), xưng hô "tui - fen".`,
-    academic: `Bạn là Giáo sư học thuật, phong cách trang trọng, chính xác.`,
-    pro: `Bạn là Siêu trí tuệ AI, có khả năng giải quyết các vấn đề logic và toán học cực kỳ phức tạp. Hãy giải thích chi tiết từng bước.`
-  };
-
-  const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: mode === 'pro' ? PRO_MODEL : FLASH_MODEL,
-    contents: msg,
     config: { 
-      systemInstruction: instructions[mode === 'pro' ? 'pro' : mode] + " Luôn dùng LaTeX cho công thức Toán.",
-      temperature: mode === 'teen' ? 0.9 : 0.5 
+      systemInstruction: "Bạn là biên tập viên chuyên nghiệp. Sửa lỗi và nâng cấp văn phong. Chỉ trả về kết quả.", 
+      temperature: 0.7 
     }
-  });
+  }, true); 
   return res.text;
 };
 
-// Nâng cấp hàm lấy link đề thi sử dụng Search Grounding thật
-export const getOfficialExamLinks = async (s: string, y: string, p: string, g: string) => {
-  const query = `Đề thi chính thức môn ${s} lớp ${g} năm ${y} tại ${p}`;
-  const searchResult = await searchEducationalResources(query);
-  return searchResult.links;
+export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' | 'pro' = 'teen') => {
+  return getChatResponse(msg, [], ""); 
 };
 
-export const generateExamPaper = async (subject: string, grade: string, difficulty: string, count: number = 10): Promise<any[]> => {
+export const getDebateResponse = async (history: any[], topic: string) => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Dùng LaTeX $...$.`,
+  const formattedHistory = history.map(h => ({ 
+      role: h.role === 'ai' ? 'model' : 'user', 
+      parts: [{ text: h.text }] 
+  }));
+
+  const res = await safeGenerateContent(ai, {
+    contents: [...formattedHistory, { role: 'user', parts: [{ text: "Phản hồi luận điểm của tôi." }] }],
     config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            answer: { type: Type.STRING },
-            explanation: { type: Type.STRING }
-          }
-        }
-      }
+        systemInstruction: `Bạn là chuyên gia phản biện về: "${topic}".`,
+        temperature: 0.9
     }
-  });
-  return parseGeminiJSON(response.text, []);
+  }, true);
+  return res.text;
 };
 
-/**
- * Generates a study roadmap for a specific subject and grade.
- * Fixes the missing export for MissionControl.tsx.
- */
+export const getOfficialExamLinks = async (s: string, y: string, p: string, g: string) => {
+  return (await searchEducationalResources(`Đề thi môn ${s} lớp ${g} năm ${y} tỉnh ${p}`)).links;
+};
+
 export const generateExamRoadmap = async (grade: string, subject: string) => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tạo lộ trình ôn thi môn ${subject} lớp ${grade} gồm 5 chương chính (roadmap). Mỗi chương bao gồm tiêu đề, danh sách chủ đề nhỏ và độ khó (theory, practice, hoặc hardcore).`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          roadmap: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                title: { type: Type.STRING },
-                topics: { type: Type.ARRAY, items: { type: Type.STRING } },
-                difficulty: { type: Type.STRING, description: 'theory, practice, hoặc hardcore' }
-              },
-              required: ['title', 'topics', 'difficulty']
-            }
-          }
-        },
-        required: ['roadmap']
-      }
-    }
+  const res = await safeGenerateContent(ai, {
+    contents: `Tạo lộ trình ôn thi môn ${subject} lớp ${grade} gồm 5 chương. Trả về JSON: { roadmap: [{ id, title, topics: [], difficulty: "theory"|"practice"|"hardcore" }] }`,
+    config: { responseMimeType: "application/json" }
   });
-  return parseGeminiJSON(response.text, { roadmap: [] });
+  return parseGeminiJSON(res.text, { roadmap: [] });
+};
+
+export const generateExamPaper = async (subject: string, grade: string, difficulty: string, count: number = 10) => {
+  const ai = getAIInstance();
+  const res = await safeGenerateContent(ai, {
+    contents: `Tạo ${count} câu trắc nghiệm ${subject} lớp ${grade} độ khó ${difficulty}. Trả về JSON: [{ question, options: [], answer, explanation }]`,
+    config: { responseMimeType: "application/json" }
+  });
+  return parseGeminiJSON(res.text, []);
 };
 
 export const analyzeStudyImage = async (base64Image: string, prompt: string) => {
   const ai = getAIInstance();
+  const base64Data = base64Image.includes('base64,') ? base64Image.split('base64,')[1] : base64Image;
   const mimeType = base64Image.match(/data:([^;]+);/)?.[1] || 'image/jpeg';
-  const base64Data = base64Image.split(',')[1];
 
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
+  const res = await safeGenerateContent(ai, {
     contents: {
       parts: [
         { inlineData: { data: base64Data, mimeType: mimeType } },
-        { text: prompt + " (Trả lời bằng tiếng Việt, dùng LaTeX $...$)" }
+        { text: prompt + " (Giải thích chi tiết, dùng LaTeX)" }
       ]
     }
   });
   return res.text;
 };
 
-export const getDailyBlitzQuiz = async (subject: string = "Kiến thức tổng hợp"): Promise<any[]> => {
+export const getDailyBlitzQuiz = async (subject: string) => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}.`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            question: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            answer: { type: Type.STRING }
-          }
-        }
-      }
-    }
+  const res = await safeGenerateContent(ai, {
+    contents: `Tạo 5 câu trắc nghiệm nhanh chủ đề ${subject}. Trả về JSON: [{ question, options: [], answer }]`,
+    config: { responseMimeType: "application/json" }
   });
-  return parseGeminiJSON(response.text, []);
-};
-
-export const getDebateResponse = async (history: any[], topic: string) => {
-  const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
-    contents: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
-    config: { systemInstruction: `Bạn là chuyên gia phản biện sắc sảo về chủ đề: "${topic}".` }
-  });
-  return res.text;
+  return parseGeminiJSON(res.text, []);
 };
 
 export const checkVibePost = async (content: string) => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Bình luận ngắn vibe Gen Z về: "${content}".`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          comment: { type: Type.STRING }
-        }
-      }
-    }
+  const res = await safeGenerateContent(ai, {
+    contents: `Bình luận ngắn vibe Gen Z về: "${content}". Trả về JSON { comment: string }`,
+    config: { responseMimeType: "application/json" }
   });
-  return parseGeminiJSON(res.text, {comment: "Vibe check ổn áp!"});
+  return parseGeminiJSON(res.text, {comment: "Vibe check ổn áp! ✨"});
 };
 
 export const getOracleReading = async () => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Bói bài Tarot học đường.`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          cardName: { type: Type.STRING },
-          rarity: { type: Type.STRING },
-          message: { type: Type.STRING },
-          luckyItem: { type: Type.STRING }
-        }
-      }
-    }
+  const res = await safeGenerateContent(ai, {
+    contents: `Bói Tarot học đường vui vẻ. Trả về JSON { cardName, rarity, message, luckyItem }`,
+    config: { responseMimeType: "application/json" }
   });
   return parseGeminiJSON(res.text, {});
 };
 
+export const gradeEssay = async (essay: string, grade: string) => {
+  const ai = getAIInstance();
+  const res = await safeGenerateContent(ai, {
+    contents: `Chấm bài văn lớp ${grade}: ${essay}. Trả về JSON { score, goodPoints:[], badPoints:[], suggestion }`,
+    config: { responseMimeType: "application/json" }
+  }, true);
+  return parseGeminiJSON(res.text, { score: 0, suggestion: "Lỗi chấm bài." });
+};
+
+export const generateStudyPlan = async (input: string) => {
+  const ai = getAIInstance();
+  const res = await safeGenerateContent(ai, { contents: `Tạo thời khóa biểu Markdown từ: "${input}".` });
+  return res.text;
+};
+
 export const summarizeText = async (text: string) => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tóm tắt nội dung sau:\n\n${text}`,
-  });
+  const res = await safeGenerateContent(ai, { contents: `Tóm tắt: ${text}` });
   return res.text;
 };
 
 export const generateFlashcards = async (text: string) => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tạo flashcards từ nội dung này.`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            front: { type: Type.STRING },
-            back: { type: Type.STRING }
-          }
-        }
-      }
-    }
+  const res = await safeGenerateContent(ai, {
+    contents: `Tạo flashcards từ: ${text}. JSON format: [{front, back}]`,
+    config: { responseMimeType: "application/json" }
   });
   return parseGeminiJSON(res.text, []);
 };
 
 export const generateMindMap = async (topic: string) => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
-    contents: `Tạo sơ đồ tư duy text cho chủ đề: "${topic}".`,
-  });
+  const res = await safeGenerateContent(ai, { contents: `Sơ đồ tư duy Markdown cho: ${topic}` }, true);
   return res.text;
 };
 
-export const gradeEssay = async (essay: string, grade: string) => {
-  const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
-    contents: `Chấm bài văn lớp ${grade} sau:\n\n${essay}`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          score: { type: Type.NUMBER },
-          goodPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-          badPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-          suggestion: { type: Type.STRING }
-        }
-      }
-    }
-  });
-  return parseGeminiJSON(res.text, { score: 0, goodPoints: [], badPoints: [], suggestion: "Lỗi chấm bài." });
+export const downloadAsFile = (filename: string, text: string) => {
+  const element = document.createElement("a");
+  const file = new Blob([text], { type: 'text/plain' });
+  element.href = URL.createObjectURL(file);
+  element.download = filename;
+  document.body.appendChild(element);
+  element.click();
+  document.body.removeChild(element);
 };
 
-export const generateStudyPlan = async (input: string) => {
-  const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Tạo thời khóa biểu học tập từ: "${input}".`,
-  });
-  return res.text;
-};
-
-export const downloadAsFile = (filename: string, content: string) => {
-  const blob = new Blob([content], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
-export const suggestHashtags = async (content: string) => ["#study", "#learn", "#studygram"];
+export const suggestHashtags = async (content: string) => ["#studygram", "#hoctap", "#genz"];
 
 export const roastOrToast = async (user: any, mode: string) => {
     const ai = getAIInstance();
-    const prompt = mode === 'roast' 
-        ? `Roast (cà khịa) hồ sơ này: Tên ${user.name}, Streak ${user.streak}. Ngắn gọn.`
-        : `Toast (khen ngợi) hồ sơ này: Tên ${user.name}, Streak ${user.streak}. Ngắn gọn.`;
-        
-    const res = await ai.models.generateContent({
-        model: FLASH_MODEL,
-        contents: prompt
-    });
+    const prompt = mode === 'roast' ? `Roast profile này: ${user.name}, Streak ${user.streak}` : `Toast profile này: ${user.name}, Streak ${user.streak}`;
+    const res = await safeGenerateContent(ai, { contents: prompt });
     return res.text;
 };
 
 export const getChampionTip = async (name: string) => {
     const ai = getAIInstance();
-    const res = await ai.models.generateContent({
-        model: FLASH_MODEL,
-        contents: `Lời khuyên học tập cho ${name}. Ngắn gọn.`
-    });
+    const res = await safeGenerateContent(ai, { contents: `Lời khuyên học tập ngắn cho ${name}` });
     return res.text;
 };
 
 export const getMotivationQuote = async () => {
   const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: "Câu nói động lực ngắn gọn style Gen Z cho người vừa học xong.",
-  });
+  const res = await safeGenerateContent(ai, { contents: "Câu nói động lực học tập ngắn." });
   return res.text;
 };

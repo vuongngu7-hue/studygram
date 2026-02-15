@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, memo, useEffect } from 'react';
 import { 
   Rocket, ChevronRight, Loader2, 
@@ -118,6 +119,8 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     const correctLetter = extractLetter(correctRaw);
 
     if (userLetter && correctLetter) return userLetter === correctLetter;
+    
+    // 3. Fallback: check starts with
     if (correctLetter && !userLetter) if (userRaw.startsWith(correctLetter)) return true;
     if (userLetter && !correctLetter) if (correctRaw.startsWith(userLetter)) return true;
 
@@ -130,7 +133,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
     try {
       const roadmapData = await generateExamRoadmap(grade, subject);
       if (!roadmapData || !roadmapData.roadmap || roadmapData.roadmap.length === 0) {
-          throw new Error("Dữ liệu lộ trình bị trống.");
+          throw new Error("AI không trả về lộ trình hợp lệ. Hãy thử lại.");
       }
       const newMission: StudyMission = {
         goal: 'THPTQG',
@@ -145,7 +148,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
       };
       onUpdate({ ...userData, currentMission: newMission });
     } catch (e: any) {
-      setLoadError("Không thể tạo lộ trình. AI có thể đang bận hoặc thiếu API Key.");
+      setLoadError(e.message || "Lỗi tạo lộ trình. Kiểm tra kết nối.");
     } finally {
       setLoading(false);
     }
@@ -165,10 +168,10 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
         setActiveExam(exam);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        setLoadError("Không tải được câu hỏi.");
+        setLoadError("AI không tạo được câu hỏi. Hãy thử lại.");
       }
-    } catch (e) {
-      setLoadError("Lỗi kết nối mạng.");
+    } catch (e: any) {
+      setLoadError(e.message || "Lỗi kết nối.");
     } finally {
       setLoadingNodeId(null);
     }
@@ -319,7 +322,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
                        <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Giải thích AI</span>
                     </div>
                     <div className="text-sm font-bold text-slate-600 leading-relaxed italic">
-                      <MarkdownText text={q.explanation || "Đang cập nhật..."} />
+                      <MarkdownText text={q.explanation || "Không có giải thích chi tiết."} />
                     </div>
                   </div>
                 )}
@@ -439,7 +442,7 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
              </div>
           )}
 
-          {mission.roadmap?.map((node, i) => {
+          {mission.roadmap && Array.isArray(mission.roadmap) && mission.roadmap.map((node, i) => {
              const isLoadingThis = loadingNodeId === node.id;
              return (
                 <button 
@@ -463,6 +466,12 @@ const MissionControl: React.FC<MissionControlProps> = ({ userData, onUpdate, onQ
                 </button>
              );
           })}
+          
+          {(!mission.roadmap || !Array.isArray(mission.roadmap) || mission.roadmap.length === 0) && (
+             <div className="p-8 text-center text-slate-400 font-black text-xs uppercase tracking-widest">
+                Chưa có dữ liệu lộ trình
+             </div>
+          )}
        </div>
 
        <div className="p-8 bg-slate-50 rounded-[3rem] border border-slate-100 text-center space-y-4">

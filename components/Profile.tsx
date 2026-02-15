@@ -1,29 +1,16 @@
+
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
 import { getLevelInfo, BADGES } from '../constants';
 import { Flame, BrainCircuit, ShieldCheck, Crown, Key, X, CheckCircle2, Share2, BarChart3, Sparkles, Medal, Gem, Wifi, WifiOff, Loader2, AlertCircle } from 'lucide-react';
-import { roastOrToast, checkConnection } from '../services/geminiService';
+import { checkConnection } from '../services/geminiService';
 
 const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => void; onToast: (m: string, t: 'success' | 'error') => void }> = ({ userData, onUpdate, onToast }) => {
   const level = getLevelInfo(userData.exp);
-  const [aiOpinion, setAiOpinion] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [adminCode, setAdminCode] = useState('');
   const [connStatus, setConnStatus] = useState<'unknown' | 'checking' | 'connected' | 'disconnected'>('unknown');
   const [connMessage, setConnMessage] = useState('');
-
-  const handleAIJudge = async (mode: 'roast' | 'toast') => {
-    setLoading(true);
-    try {
-      const res = await roastOrToast(userData, mode);
-      setAiOpinion(res);
-    } catch (e: any) {
-      setAiOpinion("Không thể kết nối AI: " + (e.message || "Lỗi lạ lắm"));
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const verifyAdmin = () => {
     if (adminCode === 'SUPREME_2025' || adminCode === 'ADMIN_FIX') {
@@ -124,21 +111,6 @@ const Profile: React.FC<{ userData: UserProfile; onUpdate: (u: UserProfile) => v
                 )
             })}
          </div>
-      </div>
-
-      <div className={`p-8 rounded-[3rem] border-white shadow-2xl mb-10 relative overflow-hidden text-white transition-all ${userData.isAdmin ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-[#1a1c2c] to-[#4a192c]'}`}>
-        <h3 className="text-xl font-black mb-6 flex items-center gap-3"><Sparkles size={20} className="text-amber-400 animate-pulse"/> AI Perfect Judge</h3>
-        {aiOpinion ? (
-          <div className="p-6 bg-white/10 rounded-3xl border border-white/20 animate-slide-up relative">
-            <p className="text-sm font-bold leading-relaxed italic">"{aiOpinion}"</p>
-            <button onClick={() => setAiOpinion(null)} className="absolute -top-3 -right-3 bg-white text-indigo-900 p-2 rounded-full shadow-lg"><X size={16}/></button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => handleAIJudge('roast')} disabled={loading} className="py-4 bg-rose-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex justify-center">{loading ? <Loader2 className="animate-spin"/> : 'Roast me!'}</button>
-            <button onClick={() => handleAIJudge('toast')} disabled={loading} className="py-4 bg-indigo-500 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl flex justify-center">{loading ? <Loader2 className="animate-spin"/> : 'Toast me!'}</button>
-          </div>
-        )}
       </div>
 
       <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="w-full py-5 bg-rose-50 text-rose-500 rounded-3xl font-black text-[10px] uppercase tracking-widest border border-rose-100 hover:bg-rose-500 hover:text-white transition-all mb-4">Đăng xuất & Xóa dữ liệu</button>
