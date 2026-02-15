@@ -298,37 +298,4 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                ) : (
                   <div className="bg-white rounded-[2rem] p-8 border border-slate-100 shadow-lg relative overflow-hidden">
                      <div className="flex justify-between items-start mb-4">
-                        <h4 className="font-black text-slate-800 flex items-center gap-2"><Sparkles size={18} className="text-amber-500"/> Kết quả AI</h4>
-                        <button onClick={() => { navigator.clipboard.writeText(typeof result === 'string' ? result : JSON.stringify(result)); }} className="text-slate-400 hover:text-indigo-600"><Copy size={18}/></button>
-                     </div>
-                     <div className="prose prose-sm max-w-none text-slate-700 leading-relaxed font-medium">
-                        {typeof result === 'string' ? <MarkdownText text={result} /> : <pre className="whitespace-pre-wrap font-mono text-xs bg-slate-50 p-4 rounded-xl">{JSON.stringify(result, null, 2)}</pre>}
-                     </div>
-                  </div>
-               )}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 gap-4">
-           {tools.map(tool => (
-              <button 
-                key={tool.id} 
-                onClick={() => setActiveTool(tool.id)}
-                className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left group relative overflow-hidden"
-              >
-                 <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-10 bg-gradient-to-br ${tool.gradient} group-hover:scale-150 transition-transform duration-500`}></div>
-                 <div className={`w-14 h-14 rounded-[1.2rem] flex items-center justify-center text-white shadow-lg mb-4 bg-gradient-to-br ${tool.gradient}`}>
-                    <tool.icon size={26} />
-                 </div>
-                 <h4 className="font-black text-slate-800 text-sm mb-1">{tool.name}</h4>
-                 <p className="text-[10px] font-bold text-slate-400 leading-tight">{tool.desc}</p>
-              </button>
-           ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default StudyTools;
+                        <h4 className="font-black text-slate-80
