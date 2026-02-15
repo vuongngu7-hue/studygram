@@ -3,29 +3,35 @@ import { GoogleGenAI, Type } from "@google/genai";
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
-// Fallback key provided by user for immediate fix
+// Key dự phòng do người dùng cung cấp để đảm bảo app luôn chạy
 const FALLBACK_KEY = 'AIzaSyAFcxaPCkftO0f6U9fxosZugd4K9wv0SVU';
 
 const getAIInstance = () => {
   let apiKey = '';
+  
+  // Bước 1: Thử lấy từ biến môi trường (Ưu tiên hàng đầu)
   try {
-    // Attempt to access process.env.API_KEY
-    if (typeof process !== 'undefined' && process.env) {
-      apiKey = process.env.API_KEY || '';
+    // Kiểm tra process và process.env một cách an toàn nhất trong môi trường trình duyệt
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      apiKey = process.env.API_KEY;
     }
   } catch (e) {
-    console.warn("[Gemini] process.env access failed, using fallback.");
+    // Bỏ qua lỗi truy cập process.env nếu môi trường không hỗ trợ
   }
 
-  // Use fallback if env var is missing or invalid
-  if (!apiKey || apiKey === 'undefined' || apiKey === 'null') {
+  // Bước 2: Kiểm tra xem Key lấy được có hợp lệ không (loại bỏ các chuỗi placeholder hoặc undefined)
+  const isInvalid = !apiKey || 
+                    apiKey === 'undefined' || 
+                    apiKey === 'null' || 
+                    apiKey.trim() === '' ||
+                    apiKey.includes('YOUR_API_KEY');
+
+  if (isInvalid) {
+    // Nếu không có Key hợp lệ từ môi trường, sử dụng Key fallback
     apiKey = FALLBACK_KEY;
   }
 
-  if (!apiKey) {
-    throw new Error("MISSING_API_KEY: Vui lòng kiểm tra cấu hình API Key.");
-  }
-
+  // Bước 3: Khởi tạo SDK (Bắt buộc phải có tham số named { apiKey })
   return new GoogleGenAI({ apiKey });
 };
 
@@ -35,7 +41,7 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
     return JSON.parse(text);
   } catch (e1) {
     try {
-      // Clean markdown code blocks if present
+      // Dọn dẹp code blocks markdown nếu AI trả về định dạng ```json ... ```
       let cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/, '').trim();
       return JSON.parse(cleaned);
     } catch (e2) {
@@ -47,45 +53,45 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
 export const checkConnection = async () => {
   try {
     const ai = getAIInstance();
+    // Gửi một prompt siêu ngắn để test kết nối
     await ai.models.generateContent({
       model: FLASH_MODEL,
-      contents: "Ping",
+      contents: "Hi",
     });
     return { success: true, message: "Kết nối ổn định" };
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
     let msg = "Lỗi không xác định";
-    if (e.message?.includes('MISSING_API_KEY')) msg = "Thiếu API Key";
-    else if (e.message?.includes('404')) msg = "Model không tồn tại (404)";
-    else if (e.message?.includes('403')) msg = "Sai API Key hoặc bị chặn (403)";
-    else if (e.message?.includes('fetch')) msg = "Lỗi mạng / CORS";
-    else msg = e.message;
+    const errStr = e.message || String(e);
+    
+    if (errStr.includes('API key')) msg = "Thiếu/Sai API Key";
+    else if (errStr.includes('404')) msg = "Model không tồn tại";
+    else if (errStr.includes('403')) msg = "Key bị chặn/Hết hạn";
+    else if (errStr.includes('fetch')) msg = "Lỗi mạng/CORS";
+    else msg = errStr;
+    
     return { success: false, message: msg };
   }
 };
 
 export const upgradeContent = async (content: string) => {
-  try {
-    const ai = getAIInstance();
-    const systemInstruction = `Bạn là chuyên gia biên tập nội dung.
+  const ai = getAIInstance();
+  const systemInstruction = `Bạn là chuyên gia biên tập nội dung.
 Nhiệm vụ:
 1. Sửa lỗi chính tả, ngữ pháp, dấu câu.
 2. Nâng cấp diễn đạt cho chuyên nghiệp và ấn tượng hơn.
 3. Giữ nguyên ý nghĩa gốc.
 Trả về: Nội dung đã sửa (Markdown) + Bảng tóm tắt các thay đổi.`;
 
-    const res = await ai.models.generateContent({
-      model: PRO_MODEL,
-      contents: content,
-      config: { 
-        systemInstruction: systemInstruction,
-        temperature: 0.7 
-      }
-    });
-    return res.text || "Không có phản hồi từ chuyên gia biên tập.";
-  } catch (e) {
-    throw e;
-  }
+  const res = await ai.models.generateContent({
+    model: PRO_MODEL,
+    contents: content,
+    config: { 
+      systemInstruction: systemInstruction,
+      temperature: 0.7 
+    }
+  });
+  return res.text || "Không có phản hồi từ chuyên gia biên tập.";
 };
 
 export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 'teen') => {
@@ -114,7 +120,6 @@ export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 
     return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
   } catch (e: any) {
     console.error("Tutor Error:", e);
-    if (e.message?.includes('MISSING_API_KEY')) throw new Error("Chưa cấu hình API Key");
     throw e;
   }
 };
