@@ -11,13 +11,17 @@ interface AITutorProps {
   onQuestProgress?: (type: QuestType, amount: number) => void;
 }
 
-// Hướng dẫn hệ thống duy nhất, tập trung vào giải bài
-const SYSTEM_INSTRUCTION = "Bạn là StudyGram AI - Trợ lý học tập thông minh. Nhiệm vụ của bạn là giải quyết mọi thắc mắc học tập của học sinh. Phong cách: Ngắn gọn, súc tích, đi thẳng vào vấn đề. Nếu là bài tập, hãy giải chi tiết từng bước (Step-by-step). Luôn sử dụng định dạng LaTeX cho các công thức toán/lý/hóa ($...$). Không lan man.";
+const PERSONAS = {
+  teen: "Bạn là 'Gia sư Gen Z' - một người bạn học tập cực kỳ thân thiện, hài hước, hay dùng teen code/slang (fen, ét ô ét, kcj,...) nhưng kiến thức thì siêu chuẩn. Nhiệm vụ: Giải thích mọi thứ thật dễ hiểu, ngắn gọn, có ví dụ thực tế vui nhộn. Luôn dùng LaTeX cho công thức ($...$). TRẢ LỜI DẠNG TEXT, KHÔNG DÙNG JSON.",
+  academic: "Bạn là 'Giáo sư Học thuật' - trang trọng, chính xác, logic và khoa học. Bạn sử dụng ngôn ngữ chuẩn mực, giải thích sâu sắc, trích dẫn định lý. Nhiệm vụ: Giúp học sinh hiểu sâu bản chất vấn đề. Luôn dùng LaTeX cho công thức ($...$). TRẢ LỜI DẠNG TEXT, KHÔNG DÙNG JSON.",
+  pro: "Bạn là 'StudyGram AI (Bản Supreme)' - Trí tuệ nhân tạo tối cao. Bạn thông minh, ngắn gọn, đi thẳng vào vấn đề, có khả năng giải quyết các bài toán khó nhất theo từng bước (Step-by-step) và đưa ra chiến thuật làm bài thi. Luôn dùng LaTeX cho công thức. TRẢ LỜI DẠNG TEXT, KHÔNG DÙNG JSON."
+};
 
 const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [tutorMode, setTutorMode] = useState<'teen' | 'academic' | 'pro'>('teen');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -47,14 +51,15 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
       
       if (imageToProcess) {
         // Xử lý ảnh
-        replyText = await analyzeStudyImage(imageToProcess, userText || "Giải chi tiết bài này giúp mình (dùng LaTeX)");
+        replyText = await analyzeStudyImage(imageToProcess, userText || "Giải thích giúp mình ảnh này với");
       } else {
-        // Chat thông thường (có nhớ lịch sử)
-        replyText = await getChatResponse(userText, messages, SYSTEM_INSTRUCTION);
+        // Chat thông thường (có nhớ lịch sử & đúng persona)
+        const persona = PERSONAS[tutorMode];
+        replyText = await getChatResponse(userText, messages, persona);
       }
       
       setMessages(prev => [...prev, { role: 'ai', text: replyText, timestamp: Date.now() }]);
-      onExp(25);
+      onExp(tutorMode === 'pro' ? 25 : 15);
     } catch (e: any) {
       console.error("Chat Error:", e);
       let errorMsg = e.message || "Mất kết nối với AI";
@@ -70,25 +75,52 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
   return (
     <div className="flex flex-col h-full bg-[#FDFCF8] relative overflow-hidden">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-xl px-4 py-3 border-b border-slate-100 flex items-center justify-between sticky top-0 z-20 transition-all">
-        <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br from-indigo-600 to-purple-600">
-               <Bot size={20} />
+      <div className="bg-white/80 backdrop-blur-xl px-4 py-3 border-b border-slate-100 flex flex-col gap-3 sticky top-0 z-20 transition-all">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg transition-all duration-300 ${
+                  tutorMode === 'pro' ? 'bg-gradient-to-br from-indigo-600 to-purple-600' : 
+                  tutorMode === 'teen' ? 'bg-gradient-to-br from-pink-500 to-rose-500' : 
+                  'bg-gradient-to-br from-slate-700 to-slate-900'
+              }`}>
+                {tutorMode === 'pro' ? <BrainCircuit size={20} /> : tutorMode === 'teen' ? <Sparkles size={20} /> : <GraduationCap size={20} />}
+              </div>
+              <div>
+                <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-1">
+                    {tutorMode === 'pro' ? 'AI Supreme' : tutorMode === 'teen' ? 'Gia Sư Gen Z' : 'Giáo Sư'}
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    {tutorMode === 'pro' ? 'Logic tối thượng' : tutorMode === 'teen' ? 'Vui vẻ & Dễ hiểu' : 'Hàn lâm & Chi tiết'}
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-1">
-                  Gia Sư AI
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </span>
-              </h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  Hỗ trợ giải bài tập 24/7
-              </p>
-            </div>
+            <button onClick={() => setMessages([])} className="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition-all" title="Xóa lịch sử chat"><Trash2 size={16} /></button>
         </div>
-        <button onClick={() => setMessages([])} className="w-8 h-8 flex items-center justify-center rounded-full text-slate-300 hover:bg-rose-50 hover:text-rose-500 transition-all" title="Xóa lịch sử chat"><Trash2 size={16} /></button>
+        
+        {/* Mode Selector - Compact */}
+        <div className="flex p-1 bg-slate-100 rounded-xl">
+            {[
+              { id: 'teen', label: 'Gen Z', icon: Sparkles },
+              { id: 'academic', label: 'Giáo Sư', icon: GraduationCap },
+              { id: 'pro', label: 'Supreme', icon: BrainCircuit }
+            ].map((mode) => (
+              <button 
+                  key={mode.id}
+                  onClick={() => setTutorMode(mode.id as any)}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all ${
+                      tutorMode === mode.id 
+                        ? 'bg-white text-indigo-600 shadow-sm' 
+                        : 'text-slate-400 hover:text-slate-600'
+                  }`}
+              >
+                  <mode.icon size={12} /> {mode.label}
+              </button>
+            ))}
+        </div>
       </div>
 
       {/* Chat Content */}
@@ -96,10 +128,10 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
         {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-[60%] opacity-60 animate-in">
                 <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                    <BrainCircuit size={32} className="text-indigo-300" />
+                    <MessageSquare size={32} className="text-indigo-300" />
                 </div>
-                <h4 className="text-slate-400 font-black text-sm uppercase tracking-widest mb-1">StudyGram AI Solver</h4>
-                <p className="text-slate-300 text-xs font-bold text-center max-w-[200px]">Gửi ảnh bài tập hoặc câu hỏi để nhận lời giải chi tiết.</p>
+                <h4 className="text-slate-400 font-black text-sm uppercase tracking-widest mb-1">Bắt đầu hội thoại</h4>
+                <p className="text-slate-300 text-xs font-bold text-center max-w-[200px]">Chọn chế độ và hỏi bất cứ điều gì về bài học...</p>
             </div>
         )}
         
@@ -149,7 +181,7 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
             value={input} 
             onChange={e => setInput(e.target.value)} 
             onKeyDown={e => e.key === 'Enter' && handleSend()} 
-            placeholder="Nhập câu hỏi hoặc gửi ảnh..." 
+            placeholder={tutorMode === 'pro' ? "Hỏi khó đến mấy cũng chơi..." : "Nhập câu hỏi..."} 
             className="flex-1 bg-transparent px-2 py-2.5 outline-none font-bold text-sm text-slate-700 placeholder:text-slate-400"
             autoFocus
           />

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Wand2, BookOpen, ListChecks, CalendarDays, 
@@ -34,7 +35,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'Biên tập & Nâng cấp', 
       desc: 'Sửa lỗi chính tả, ngữ pháp và nâng cấp diễn đạt chuyên nghiệp.', 
       icon: Edit3, 
-      color: 'bg-violet-600',
+      color: 'bg-violet-600', 
       gradient: 'from-violet-500 to-purple-600',
       placeholder: 'Dán nội dung cần biên tập vào đây...'
     },
@@ -43,7 +44,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'Kho Đề Sở GD', 
       desc: 'Truy tìm đề thi chính thức từ Google Search Grounding.', 
       icon: Search, 
-      color: 'bg-indigo-600',
+      color: 'bg-indigo-600', 
       gradient: 'from-indigo-500 to-blue-600',
       placeholder: 'Tìm kiếm đề thi (VD: Đề Toán 2024 Hà Nội)...'
     },
@@ -52,7 +53,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'AI Quiz Gen', 
       desc: 'Tự động tạo bộ đề trắc nghiệm theo chuẩn Sở GD.', 
       icon: GraduationCap, 
-      color: 'bg-rose-500',
+      color: 'bg-rose-500', 
       gradient: 'from-rose-500 to-pink-600',
       placeholder: 'Chủ đề ôn thi...'
     },
@@ -61,7 +62,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'Chấm Văn AI', 
       desc: 'Chấm điểm bài văn bởi Gemini AI.', 
       icon: PenTool, 
-      color: 'bg-orange-500',
+      color: 'bg-orange-500', 
       gradient: 'from-orange-500 to-amber-600',
       placeholder: 'Dán bài văn của bạn vào đây để AI chấm điểm...'
     },
@@ -70,7 +71,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'Lập Kế Hoạch', 
       desc: 'Tạo thời khóa biểu học tập thông minh, cân bằng.', 
       icon: Calendar, 
-      color: 'bg-cyan-500',
+      color: 'bg-cyan-500', 
       gradient: 'from-cyan-500 to-teal-600',
       placeholder: 'VD: Tôi rảnh tối 2-4-6 từ 7h-9h, muốn ôn Toán và Lý...'
     },
@@ -79,7 +80,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       name: 'Sơ đồ tư duy', 
       desc: 'Phân tích chủ đề thành sơ đồ tư duy logic.', 
       icon: Network, 
-      color: 'bg-emerald-500',
+      color: 'bg-emerald-500', 
       gradient: 'from-emerald-500 to-green-600',
       placeholder: 'Nhập chủ đề bạn muốn lập sơ đồ...'
     }

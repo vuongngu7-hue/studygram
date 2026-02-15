@@ -1,11 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Sử dụng model miễn phí/experimental mạnh mẽ nhất hiện tại
 const PRIMARY_FLASH_MODEL = 'gemini-2.0-flash-exp';
 const PRIMARY_PRO_MODEL = 'gemini-2.0-flash-exp';
-
-// Model dự phòng
 const FALLBACK_MODEL = 'gemini-2.0-flash-exp';
 
 let activeFlashModel = PRIMARY_FLASH_MODEL;
@@ -19,24 +16,15 @@ const getAIInstance = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-/**
- * Wrapper an toàn để gọi AI.
- * Nếu model chính lỗi "Not Found" (404), tự động thử lại bằng model dự phòng.
- */
 const safeGenerateContent = async (ai: GoogleGenAI, params: any, isPro = false) => {
   try {
     const model = isPro ? activeProModel : activeFlashModel;
     return await ai.models.generateContent({ ...params, model });
   } catch (error: any) {
-    // Nếu lỗi do Model không tồn tại hoặc không truy cập được (404/400)
     if (error.message?.includes("not found") || error.message?.includes("404") || error.message?.includes("not supported")) {
-      console.warn(`Model ${isPro ? activeProModel : activeFlashModel} failed. Switching to fallback: ${FALLBACK_MODEL}`);
-      
-      // Cập nhật model active để các request sau dùng luôn fallback
+      console.warn(`Model failed. Switching to fallback: ${FALLBACK_MODEL}`);
       if (isPro) activeProModel = FALLBACK_MODEL;
       else activeFlashModel = FALLBACK_MODEL;
-
-      // Thử lại với fallback
       return await ai.models.generateContent({ ...params, model: FALLBACK_MODEL });
     }
     throw error;
@@ -55,22 +43,8 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
       try {
         const firstOpenBrace = text.indexOf('{');
         const lastCloseBrace = text.lastIndexOf('}');
-        const firstOpenBracket = text.indexOf('[');
-        const lastCloseBracket = text.lastIndexOf(']');
-        
-        let start = -1; 
-        let end = -1;
-
-        if (firstOpenBrace !== -1 && (firstOpenBracket === -1 || firstOpenBrace < firstOpenBracket)) {
-            start = firstOpenBrace;
-            end = lastCloseBrace;
-        } else if (firstOpenBracket !== -1) {
-            start = firstOpenBracket;
-            end = lastCloseBracket;
-        }
-
-        if (start !== -1 && end !== -1 && end > start) {
-            return JSON.parse(text.substring(start, end + 1));
+        if (firstOpenBrace !== -1 && lastCloseBrace !== -1) {
+            return JSON.parse(text.substring(firstOpenBrace, lastCloseBrace + 1));
         }
         return defaultValue;
       } catch (e3) {
@@ -83,11 +57,9 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
 export const checkConnection = async () => {
   try {
     const ai = getAIInstance();
-    // Thử kết nối
     await safeGenerateContent(ai, { contents: "Ping" });
     return { success: true, message: `Đã kết nối (${activeFlashModel})` };
   } catch (e: any) {
-    console.error("Connection Check Failed:", e);
     if (e.message === "MISSING_KEY") return { success: false, message: "Chưa nhập API Key" };
     return { success: false, message: e.message || "Lỗi kết nối mạng" };
   }
@@ -95,28 +67,43 @@ export const checkConnection = async () => {
 
 export const getChatResponse = async (message: string, history: any[], systemInstruction?: string) => {
   const ai = getAIInstance();
-  const defaultInstruction = 'Bạn là StudyGram AI, trợ lý học tập thông minh.';
   
+  // Format history correctly for Gemini API
+  const formattedHistory = history.map(h => ({ 
+    role: h.role === 'ai' ? 'model' : 'user', 
+    parts: [{ text: h.text }] 
+  }));
+
   const chatConfig = {
     model: activeProModel, 
-    history: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
+    history: formattedHistory,
     config: { 
       temperature: 0.8, 
-      systemInstruction: systemInstruction || defaultInstruction 
+      systemInstruction: systemInstruction || 'Bạn là trợ lý học tập StudyGram. Trả lời ngắn gọn, trực tiếp, không dùng JSON.' 
     }
   };
 
   try {
     const chat = ai.chats.create(chatConfig);
     const res = await chat.sendMessage({ message });
-    return res.text;
+    let text = res.text;
+
+    // FIX: Nếu AI lỡ trả về JSON như trong ảnh lỗi, ta sẽ cố gắng parse lấy nội dung
+    if (text.trim().startsWith('{') && text.includes("phan_hoi")) {
+        try {
+            const json = JSON.parse(text);
+            if (json.phan_hoi) return json.phan_hoi;
+            if (json.response) return json.response;
+        } catch (e) {
+            // Nếu parse lỗi thì trả về text gốc
+        }
+    }
+    
+    return text;
   } catch (error: any) {
      if (error.message?.includes("not found") || error.message?.includes("404")) {
         activeProModel = FALLBACK_MODEL;
-        const fallbackChat = ai.chats.create({
-            ...chatConfig,
-            model: FALLBACK_MODEL
-        });
+        const fallbackChat = ai.chats.create({ ...chatConfig, model: FALLBACK_MODEL });
         const res = await fallbackChat.sendMessage({ message });
         return res.text;
      }
@@ -156,7 +143,7 @@ export const upgradeContent = async (content: string) => {
   return res.text;
 };
 
-export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' | 'pro' = 'teen') => {
+export const getTutorResponse = async (msg: string) => {
   return getChatResponse(msg, [], ""); 
 };
 
