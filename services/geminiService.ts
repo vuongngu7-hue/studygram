@@ -3,8 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
-// Key dự phòng do người dùng cung cấp để đảm bảo app luôn chạy
-const FALLBACK_KEY = 'AIzaSyAFcxaPCkftO0f6U9fxosZugd4K9wv0SVU';
+// Key dự phòng mới do người dùng cung cấp
+const FALLBACK_KEY = 'AIzaSyBRYOzbx59zLnejx6MxTdpuKFVy-OOXseY';
 
 const getAIInstance = () => {
   let apiKey = '';
