@@ -1,4 +1,5 @@
 
+// Add React import to resolve namespace error
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Trophy, Target, Stars, ArrowRight, BrainCircuit, Users, Zap, 
@@ -74,8 +75,11 @@ const QuizArena: React.FC<QuizArenaProps> = ({ onExp, showToast, onQuestProgress
       const response = await getDebateResponse(newMessages, activeTopic);
       setMessages(prev => [...prev, { role: 'ai', text: response }]);
       onExp(5);
-    } catch (error) {
-      showToast("AI đang suy ngẫm quá sâu, hãy thử lại nhé!");
+    } catch (error: any) {
+      console.error("Debate Interaction Error:", error);
+      const errorMsg = error.message || "AI đang bận, hãy thử lại nhé!";
+      showToast(errorMsg);
+      setMessages(prev => [...prev, { role: 'ai', text: `⚠️ Lỗi: ${errorMsg}` }]);
     } finally {
       setIsTyping(false);
     }

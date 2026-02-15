@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Wand2, BookOpen, ListChecks, CalendarDays, 
@@ -5,7 +6,7 @@ import {
   Copy, Check, LayoutGrid, RotateCw, Download, FileText,
   Smile, ImageIcon, Network, ChevronDown, GraduationCap, Map,
   CheckCircle2, AlertCircle, Search, Globe, Filter,
-  Gem, Eye, Moon, PenTool, Calendar, ThumbsUp, ThumbsDown, Edit3
+  Gem, Eye, Moon, PenTool, Calendar, ThumbsUp, ThumbsDown, Edit3, ExternalLink
 } from 'lucide-react';
 import { 
   summarizeText, generateFlashcards, downloadAsFile, 
@@ -41,8 +42,8 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
     { 
       id: 'exam_bank', 
       name: 'Kho Đề Sở GD', 
-      desc: 'Truy tìm đề thi chính thức của các Sở GD qua các năm.', 
-      icon: Globe, 
+      desc: 'Truy tìm đề thi chính thức từ Google Search Grounding.', 
+      icon: Search, 
       color: 'bg-indigo-600',
       gradient: 'from-indigo-500 to-blue-600',
       placeholder: 'Tìm kiếm đề thi (VD: Đề Toán 2024 Hà Nội)...'
@@ -59,7 +60,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
     { 
       id: 'essay_grader', 
       name: 'Chấm Văn AI', 
-      desc: 'Chấm điểm bài văn, phân tích ưu nhược điểm chi tiết.', 
+      desc: 'Chấm điểm bài văn bởi Gemini 3 Pro.', 
       icon: PenTool, 
       color: 'bg-orange-500',
       gradient: 'from-orange-500 to-amber-600',
@@ -100,7 +101,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       } else if (activeTool === 'exam_bank') {
         const links = await getOfficialExamLinks(filters.subject, filters.year, filters.province, filters.grade);
         setExamLinks(links);
-        onExp(10);
+        onExp(15);
       } else if (activeTool === 'quiz_creator') {
         const res = await generateExamPaper(input || filters.subject, filters.grade, "practice", 10);
         setResult(res);
@@ -120,9 +121,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
       }
     } catch (error: any) {
       console.error(error);
-      const msg = error.message?.includes('API_KEY') 
-        ? 'Thiếu API Key. Hãy kiểm tra file .env' 
-        : (error.message || 'Không thể thực hiện tác vụ này.');
+      const msg = error.message || 'Không thể thực hiện tác vụ này.';
       setError(msg);
       setResult(msg);
     } finally {
@@ -212,7 +211,6 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                 </div>
               )}
            </div>
-           <style>{`.perspective-1000 { perspective: 1000px; } .transform-style-3d { transform-style: preserve-3d; } .backface-hidden { backface-visibility: hidden; } .rotate-y-180 { transform: rotateY(180deg); }`}</style>
         </div>
       </div>
 
@@ -231,13 +229,13 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
 
             {(activeTool === 'exam_bank' || activeTool === 'quiz_creator' || activeTool === 'essay_grader') && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                <select value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
+                <select value={filters.year} onChange={e => setFilters({...filters, year: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 transition-all">
                   {['2024', '2023', '2022', '2021', '2020'].map(y => <option key={y} value={y}>Năm {y}</option>)}
                 </select>
-                <select value={filters.subject} onChange={e => setFilters({...filters, subject: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
+                <select value={filters.subject} onChange={e => setFilters({...filters, subject: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 transition-all">
                   {['Toán học', 'Ngữ văn', 'Tiếng Anh', 'Vật lý', 'Hóa học', 'Sinh học', 'Lịch sử', 'Địa lý'].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <select value={filters.grade} onChange={e => setFilters({...filters, grade: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all">
+                <select value={filters.grade} onChange={e => setFilters({...filters, grade: e.target.value})} className="bg-white p-3 rounded-xl font-bold text-xs outline-none border border-slate-200 focus:border-indigo-400 transition-all">
                   {['10', '11', '12'].map(g => <option key={g} value={g}>Lớp {g}</option>)}
                 </select>
               </div>
@@ -250,15 +248,13 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
               className="w-full h-48 bg-slate-50 rounded-2xl p-5 outline-none border-2 border-transparent focus:border-indigo-200 focus:bg-white transition-all mb-4 font-bold text-sm leading-relaxed placeholder:text-slate-300 resize-none"
             />
             
-            <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${currentTool?.gradient} hover:scale-[1.01] active:scale-95 disabled:opacity-50 disabled:scale-100`}>
+            <button onClick={handleRunTool} disabled={loading} className={`w-full py-5 rounded-[1.8rem] text-white font-black shadow-lg transition-all flex items-center justify-center gap-3 bg-gradient-to-r ${currentTool?.gradient} hover:scale-[1.01] active:scale-95 disabled:opacity-50`}>
                {loading ? <RotateCw className="animate-spin"/> : <Sparkles size={20}/>} {loading ? 'AI đang xử lý...' : 'KÍCH HOẠT CÔNG CỤ'}
             </button>
           </div>
 
           {(result || examLinks.length > 0 || isErrorState) && (
             <div className="glass rounded-[3.5rem] p-8 border-2 border-white shadow-2xl animate-slide-up bg-white/80">
-               
-               {/* ERROR DISPLAY */}
                {isErrorState && (
                   <div className="p-6 bg-rose-50 border border-rose-100 rounded-[2rem] text-center animate-shake">
                       <AlertCircle size={32} className="mx-auto text-rose-500 mb-2"/>
@@ -269,15 +265,22 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
 
                {!isErrorState && activeTool === 'exam_bank' && (
                  <div className="space-y-4">
-                    <h4 className="font-black text-indigo-600 text-[10px] uppercase tracking-widest mb-4 flex items-center gap-2">KẾT QUẢ TỪ CƠ SỞ DỮ LIỆU SỞ GD</h4>
-                    {examLinks.map((link, i) => (
-                      <a key={i} href={link.web?.uri} target="_blank" rel="noreferrer" className="block p-5 bg-white border border-slate-100 rounded-3xl hover:border-indigo-400 hover:shadow-lg transition-all group">
+                    <h4 className="font-black text-indigo-600 text-[10px] uppercase tracking-widest mb-4 flex items-center gap-2">KẾT QUẢ TỪ GOOGLE SEARCH GROUNDING</h4>
+                    {examLinks.length > 0 ? examLinks.map((link, i) => (
+                      <a key={i} href={link.uri} target="_blank" rel="noreferrer" className="block p-5 bg-white border border-slate-100 rounded-3xl hover:border-indigo-400 hover:shadow-lg transition-all group">
                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-sm text-slate-700 group-hover:text-indigo-600 line-clamp-1">{link.web?.title || "Tài liệu đề thi"}</span>
-                            <Globe size={18} className="text-slate-300 group-hover:text-indigo-600 shrink-0" />
+                            <div className="flex-1">
+                               <span className="font-black text-xs text-indigo-500 uppercase tracking-widest block mb-1">Nguồn tin cậy</span>
+                               <span className="font-bold text-sm text-slate-700 group-hover:text-indigo-600 line-clamp-2">{link.title || "Tài liệu đề thi"}</span>
+                            </div>
+                            <ExternalLink size={20} className="text-slate-300 group-hover:text-indigo-600 shrink-0 ml-4" />
                          </div>
                       </a>
-                    ))}
+                    )) : (
+                      <div className="text-center py-10 opacity-50">
+                         <p className="text-xs font-bold">Không tìm thấy liên kết trực tiếp, vui lòng thử lại.</p>
+                      </div>
+                    )}
                  </div>
                )}
 
@@ -303,66 +306,21 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
                  </div>
                )}
 
-               {/* KẾT QUẢ CHẤM VĂN / BIÊN TẬP */}
-               {!isErrorState && (activeTool === 'essay_grader' || activeTool === 'content_upgrader') && typeof result === 'object' && result.score && (
-                 <div className="space-y-6">
-                    <div className="flex items-center justify-between border-b border-orange-100 pb-6 mb-4">
-                        <div className="flex items-center gap-4">
-                           <div className="w-20 h-20 bg-orange-500 rounded-full flex items-center justify-center text-white font-black text-3xl shadow-lg border-4 border-orange-200">
-                              {result.score}
-                           </div>
-                           <div>
-                              <h4 className="font-black text-slate-800 text-lg uppercase tracking-tight">KẾT QUẢ CHẤM</h4>
-                              <p className="text-xs font-bold text-slate-500">Bởi AI Giám Khảo</p>
-                           </div>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-5 bg-green-50 rounded-3xl border border-green-100">
-                           <h5 className="flex items-center gap-2 font-black text-green-700 text-xs uppercase mb-3"><ThumbsUp size={14}/> Điểm mạnh</h5>
-                           <ul className="space-y-2">
-                              {result.goodPoints?.map((p: string, i: number) => (
-                                <li key={i} className="text-xs font-bold text-slate-600 flex items-start gap-2"><CheckCircle2 size={12} className="shrink-0 mt-0.5 text-green-500"/> {p}</li>
-                              ))}
-                           </ul>
-                        </div>
-                        <div className="p-5 bg-rose-50 rounded-3xl border border-rose-100">
-                           <h5 className="flex items-center gap-2 font-black text-rose-700 text-xs uppercase mb-3"><ThumbsDown size={14}/> Cần cải thiện</h5>
-                           <ul className="space-y-2">
-                              {result.badPoints?.map((p: string, i: number) => (
-                                <li key={i} className="text-xs font-bold text-slate-600 flex items-start gap-2"><AlertCircle size={12} className="shrink-0 mt-0.5 text-rose-500"/> {p}</li>
-                              ))}
-                           </ul>
-                        </div>
-                    </div>
-
-                    <div className="bg-orange-50/50 p-6 rounded-3xl border border-orange-100">
-                        <h5 className="font-black text-orange-800 text-xs uppercase mb-2">Lời khuyên của AI</h5>
-                        <p className="text-sm font-bold text-slate-700 italic leading-relaxed">{result.suggestion}</p>
-                    </div>
-                 </div>
-               )}
-
-               {/* HIỂN THỊ SƠ ĐỒ TƯ DUY / KẾ HOẠCH / BIÊN TẬP NỘI DUNG (STRING RESULT) */}
-               {!isErrorState && (activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary' || activeTool === 'content_upgrader') && typeof result === 'string' && (
+               {!isErrorState && (activeTool === 'mindmap' || activeTool === 'scheduler' || activeTool === 'summary' || activeTool === 'content_upgrader' || activeTool === 'essay_grader') && (
                  <div className="space-y-6">
                     <div className="flex items-center gap-3 border-b border-indigo-100 pb-4 mb-4">
                       <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center text-white"><FileText size={18}/></div>
-                      <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Kết quả xử lý</h4>
+                      <h4 className="font-black text-slate-800 text-sm uppercase tracking-widest">Kết quả phân tích (Gemini 3 Pro)</h4>
                     </div>
                     <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-inner max-h-[600px] overflow-y-auto no-scrollbar">
-                      <MarkdownText text={result} />
+                      <MarkdownText text={typeof result === 'string' ? result : JSON.stringify(result, null, 2)} />
                     </div>
                     <div className="flex gap-4">
                         <button onClick={() => {
-                            navigator.clipboard.writeText(result);
+                            navigator.clipboard.writeText(typeof result === 'string' ? result : JSON.stringify(result));
                             onExp(5);
                         }} className="flex-1 flex items-center justify-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-white px-4 py-4 rounded-2xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-colors">
-                            <Copy size={14}/> Sao chép kết quả
-                        </button>
-                        <button onClick={() => downloadAsFile(`studygram_${activeTool}_${Date.now()}.txt`, result)} className="flex-1 flex items-center justify-center gap-2 text-indigo-600 font-black text-[10px] uppercase tracking-widest bg-white px-4 py-4 rounded-2xl shadow-sm border border-indigo-100 hover:bg-indigo-50 transition-colors">
-                            <Download size={14}/> Tải về máy
+                            <Copy size={14}/> Sao chép
                         </button>
                     </div>
                  </div>
@@ -374,7 +332,7 @@ const StudyTools: React.FC<{ onExp: (amount: number) => void }> = ({ onExp }) =>
         <>
           <div className="text-center py-6">
             <h2 className="text-4xl font-black text-slate-800 tracking-tighter mb-2">SUPREME TOOLS</h2>
-            <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Bộ công cụ AI toàn năng</p>
+            <p className="text-slate-400 font-black text-[10px] uppercase tracking-[0.4em]">Gemini 3 Powered Intelligence</p>
           </div>
           <div className="grid grid-cols-2 gap-4">
             {tools.map(tool => (

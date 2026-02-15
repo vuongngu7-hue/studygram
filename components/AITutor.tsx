@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Send, Trash2, Camera, X, Zap, FastForward, UserCheck, GraduationCap, Sparkles, AlertCircle } from 'lucide-react';
+import { Bot, Send, Trash2, Camera, X, Zap, FastForward, UserCheck, GraduationCap, Sparkles, AlertCircle, BrainCircuit } from 'lucide-react';
 import { Message, UserProfile, QuestType } from '../types';
-import { getTutorResponse, analyzeStudyImage } from '../services/geminiService';
+import { getTutorResponse, analyzeStudyImage, getChatResponse } from '../services/geminiService';
 import MarkdownText from './MarkdownText';
 
 interface AITutorProps {
@@ -14,7 +15,7 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [tutorMode, setTutorMode] = useState<'teen' | 'academic'>('teen');
+  const [tutorMode, setTutorMode] = useState<'teen' | 'academic' | 'pro'>('teen');
   const [isFastMode, setIsFastMode] = useState(true);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
@@ -39,12 +40,18 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
     if (onQuestProgress) onQuestProgress('ai_interaction', 1);
 
     try {
-      const promptSuffix = isFastMode ? " (Trả lời cực ngắn gọn)" : "";
-      const replyText = imageToProcess 
-        ? await analyzeStudyImage(imageToProcess, (userText || "Giải thích ảnh này") + promptSuffix)
-        : await getTutorResponse(userText + promptSuffix, tutorMode);
+      let replyText = "";
+      if (imageToProcess) {
+        replyText = await analyzeStudyImage(imageToProcess, userText || "Giải thích ảnh này");
+      } else if (tutorMode === 'pro') {
+        replyText = await getChatResponse(userText, messages);
+      } else {
+        const promptSuffix = isFastMode ? " (Trả lời cực ngắn gọn)" : "";
+        replyText = await getTutorResponse(userText + promptSuffix, tutorMode);
+      }
+      
       setMessages(prev => [...prev, { role: 'ai', text: replyText, timestamp: Date.now() }]);
-      onExp(15);
+      onExp(tutorMode === 'pro' ? 25 : 15);
     } catch (e: any) {
       setMessages(prev => [...prev, { role: 'ai', text: `⚠️ Lỗi: ${e.message || "Mất kết nối với AI"}`, timestamp: Date.now() }]);
     } finally {
@@ -55,14 +62,16 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
   return (
     <div className="flex flex-col h-full bg-[#F4F7FF]/30 relative overflow-hidden">
       {/* Header Nâng Cấp */}
-      <div className="bg-white/95 backdrop-blur-xl p-4 border-b flex flex-col gap-3 shadow-sm z-10 sticky top-0">
+      <div className={`bg-white/95 backdrop-blur-xl p-4 border-b flex flex-col gap-3 shadow-sm z-10 sticky top-0 transition-all duration-500 ${tutorMode === 'pro' ? 'border-indigo-300 ring-2 ring-indigo-50' : 'border-slate-100'}`}>
         <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg"><Bot size={22} /></div>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg transition-colors ${tutorMode === 'pro' ? 'bg-gradient-to-br from-indigo-600 to-purple-600' : 'bg-indigo-600'}`}>
+                {tutorMode === 'pro' ? <BrainCircuit size={22} /> : <Bot size={22} />}
+              </div>
               <div>
-                <h3 className="font-black text-slate-800 text-sm tracking-tight">AI Tutor Supreme</h3>
+                <h3 className="font-black text-slate-800 text-sm tracking-tight">{tutorMode === 'pro' ? 'Gemini 3 Pro AI' : 'AI Tutor Supreme'}</h3>
                 <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                    <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${tutorMode === 'pro' ? 'bg-indigo-500' : 'bg-green-500'}`}></span>
                     <span className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">Sẵn sàng hỗ trợ</span>
                 </div>
               </div>
@@ -72,22 +81,23 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
         
         {/* Mode Selector */}
         <div className="flex gap-2">
-            <button 
-                onClick={() => setTutorMode('teen')}
-                className={`flex-1 py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all border-2 ${
-                    tutorMode === 'teen' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-100'
-                }`}
-            >
-                <Sparkles size={12} /> Teen Mode
-            </button>
-            <button 
-                onClick={() => setTutorMode('academic')}
-                className={`flex-1 py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all border-2 ${
-                    tutorMode === 'academic' ? 'bg-slate-800 border-slate-800 text-white shadow-md' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                }`}
-            >
-                <GraduationCap size={12} /> Academic
-            </button>
+            {[
+              { id: 'teen', icon: Sparkles, label: 'Teen' },
+              { id: 'academic', icon: GraduationCap, label: 'Academic' },
+              { id: 'pro', icon: BrainCircuit, label: 'Pro Mode' }
+            ].map((mode) => (
+              <button 
+                  key={mode.id}
+                  onClick={() => setTutorMode(mode.id as any)}
+                  className={`flex-1 py-2 px-1 rounded-xl text-[8px] font-black uppercase tracking-widest flex items-center justify-center gap-1 transition-all border-2 ${
+                      tutorMode === mode.id 
+                        ? (mode.id === 'pro' ? 'bg-indigo-600 border-indigo-600 text-white shadow-md' : 'bg-slate-800 border-slate-800 text-white') 
+                        : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-100'
+                  }`}
+              >
+                  <mode.icon size={10} /> {mode.label}
+              </button>
+            ))}
         </div>
       </div>
 
@@ -109,7 +119,7 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
         ))}
         {isTyping && (
             <div className="flex justify-start">
-                <div className="bg-white p-4 rounded-full shadow-sm flex gap-1.5 animate-pulse">
+                <div className={`p-4 rounded-full shadow-sm flex gap-1.5 animate-pulse ${tutorMode === 'pro' ? 'bg-indigo-50' : 'bg-white'}`}>
                     <div className="w-1.5 h-1.5 bg-indigo-300 rounded-full"></div>
                     <div className="w-1.5 h-1.5 bg-indigo-300 rounded-full"></div>
                     <div className="w-1.5 h-1.5 bg-indigo-300 rounded-full"></div>
@@ -127,7 +137,7 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
             <button onClick={() => setSelectedImage(null)} className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white p-1 rounded-full shadow-md"><X size={10}/></button>
           </div>
         )}
-        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-[2rem] border-2 border-slate-100 focus-within:bg-white focus-within:border-indigo-400 transition-all shadow-inner">
+        <div className={`flex items-center gap-2 bg-slate-50 p-1.5 rounded-[2rem] border-2 transition-all shadow-inner ${tutorMode === 'pro' ? 'focus-within:border-indigo-500 ring-indigo-100 ring-offset-2' : 'focus-within:border-indigo-400 border-slate-100'}`}>
           <button onClick={() => fileInputRef.current?.click()} className="p-3 text-slate-400 hover:text-indigo-600 transition-colors"><Camera size={20}/></button>
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={e => {
             const file = e.target.files?.[0];
@@ -137,13 +147,13 @@ const AITutor: React.FC<AITutorProps> = ({ userData, onExp, onQuestProgress }) =
             value={input} 
             onChange={e => setInput(e.target.value)} 
             onKeyDown={e => e.key === 'Enter' && handleSend()} 
-            placeholder={tutorMode === 'teen' ? "Hỏi gì lẹ đi fen..." : "Vấn đề của bạn là gì?"} 
+            placeholder={tutorMode === 'pro' ? "Hỏi vấn đề phức tạp nhất..." : "Hỏi gì lẹ đi fen..."} 
             className="flex-1 bg-transparent px-2 py-2.5 outline-none font-bold text-sm"
           />
           <button 
             onClick={handleSend} 
             disabled={(!input.trim() && !selectedImage) || isTyping} 
-            className="w-10 h-10 bg-indigo-600 text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-all disabled:opacity-30"
+            className={`w-10 h-10 text-white rounded-2xl shadow-lg flex items-center justify-center active:scale-90 transition-all disabled:opacity-30 ${tutorMode === 'pro' ? 'bg-indigo-600' : 'bg-slate-900'}`}
           >
             <Send size={18}/>
           </button>

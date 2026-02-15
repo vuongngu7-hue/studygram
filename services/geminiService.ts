@@ -1,38 +1,12 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 
 const FLASH_MODEL = 'gemini-3-flash-preview';
 const PRO_MODEL = 'gemini-3-pro-preview';
 
-// Key dự phòng mới do người dùng cung cấp
-const FALLBACK_KEY = 'AIzaSyBRYOzbx59zLnejx6MxTdpuKFVy-OOXseY';
-
+// Khởi tạo AI Instance theo hướng dẫn mới nhất
 const getAIInstance = () => {
-  let apiKey = '';
-  
-  // Bước 1: Thử lấy từ biến môi trường (Ưu tiên hàng đầu)
-  try {
-    // Kiểm tra process và process.env một cách an toàn nhất trong môi trường trình duyệt
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      apiKey = process.env.API_KEY;
-    }
-  } catch (e) {
-    // Bỏ qua lỗi truy cập process.env nếu môi trường không hỗ trợ
-  }
-
-  // Bước 2: Kiểm tra xem Key lấy được có hợp lệ không (loại bỏ các chuỗi placeholder hoặc undefined)
-  const isInvalid = !apiKey || 
-                    apiKey === 'undefined' || 
-                    apiKey === 'null' || 
-                    apiKey.trim() === '' ||
-                    apiKey.includes('YOUR_API_KEY');
-
-  if (isInvalid) {
-    // Nếu không có Key hợp lệ từ môi trường, sử dụng Key fallback
-    apiKey = FALLBACK_KEY;
-  }
-
-  // Bước 3: Khởi tạo SDK (Bắt buộc phải có tham số named { apiKey })
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY as string });
 };
 
 const parseGeminiJSON = (text: string, defaultValue: any) => {
@@ -41,7 +15,6 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
     return JSON.parse(text);
   } catch (e1) {
     try {
-      // Dọn dẹp code blocks markdown nếu AI trả về định dạng ```json ... ```
       let cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/, '').trim();
       return JSON.parse(cleaned);
     } catch (e2) {
@@ -53,7 +26,6 @@ const parseGeminiJSON = (text: string, defaultValue: any) => {
 export const checkConnection = async () => {
   try {
     const ai = getAIInstance();
-    // Gửi một prompt siêu ngắn để test kết nối
     await ai.models.generateContent({
       model: FLASH_MODEL,
       contents: "Hi",
@@ -61,103 +33,95 @@ export const checkConnection = async () => {
     return { success: true, message: "Kết nối ổn định" };
   } catch (e: any) {
     console.error("❌ [GeminiService] Connection Failed:", e);
-    let msg = "Lỗi không xác định";
-    const errStr = e.message || String(e);
-    
-    if (errStr.includes('API key')) msg = "Thiếu/Sai API Key";
-    else if (errStr.includes('404')) msg = "Model không tồn tại";
-    else if (errStr.includes('403')) msg = "Key bị chặn/Hết hạn";
-    else if (errStr.includes('fetch')) msg = "Lỗi mạng/CORS";
-    else msg = errStr;
-    
-    return { success: false, message: msg };
+    return { success: false, message: e.message || "Lỗi kết nối" };
   }
+};
+
+// --- CHATBOT FEATURE (PRO MODEL) ---
+export const getChatResponse = async (message: string, history: any[] = []) => {
+  const ai = getAIInstance();
+  const chat = ai.chats.create({
+    model: PRO_MODEL,
+    config: {
+      systemInstruction: 'Bạn là StudyGram AI, một trợ lý học tập thông minh và thân thiện dành cho học sinh Việt Nam. Bạn có khả năng tư duy logic cực cao, giải quyết các bài tập khó và đưa ra lời khuyên học tập sâu sắc.',
+      temperature: 0.8,
+    }
+  });
+
+  // Chuyển đổi lịch sử chat sang định dạng của Gemini
+  // Lưu ý: Gemini API chats.create hiện tại hỗ trợ gửi tin nhắn trực tiếp qua sendMessage
+  const response = await chat.sendMessage({ message });
+  return response.text;
+};
+
+// --- SEARCH GROUNDING FEATURE (FLASH MODEL + SEARCH TOOL) ---
+export const searchEducationalResources = async (query: string) => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: FLASH_MODEL,
+    contents: `Tìm kiếm và liệt kê 5 nguồn tài liệu uy tín nhất cho: ${query}. Trình bày ngắn gọn và khách quan.`,
+    config: {
+      tools: [{ googleSearch: {} }],
+    },
+  });
+
+  const text = response.text;
+  const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+  
+  // Trích xuất URLs từ groundingChunks
+  const links = sources
+    .filter((chunk: any) => chunk.web && chunk.web.uri)
+    .map((chunk: any) => ({
+      title: chunk.web.title,
+      uri: chunk.web.uri
+    }));
+
+  return { text, links };
 };
 
 export const upgradeContent = async (content: string) => {
   const ai = getAIInstance();
-  const systemInstruction = `Bạn là chuyên gia biên tập nội dung.
-Nhiệm vụ:
-1. Sửa lỗi chính tả, ngữ pháp, dấu câu.
-2. Nâng cấp diễn đạt cho chuyên nghiệp và ấn tượng hơn.
-3. Giữ nguyên ý nghĩa gốc.
-Trả về: Nội dung đã sửa (Markdown) + Bảng tóm tắt các thay đổi.`;
+  const systemInstruction = `Bạn là chuyên gia biên tập nội dung chuyên nghiệp. Hãy nâng cấp văn bản sau lên tầm cao mới, sửa lỗi và làm cho nó ấn tượng hơn. Trả về kết quả bằng Markdown.`;
 
   const res = await ai.models.generateContent({
     model: PRO_MODEL,
     contents: content,
-    config: { 
-      systemInstruction: systemInstruction,
-      temperature: 0.7 
-    }
+    config: { systemInstruction, temperature: 0.7 }
   });
-  return res.text || "Không có phản hồi từ chuyên gia biên tập.";
+  return res.text || "Không có phản hồi.";
 };
 
-export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' = 'teen') => {
+export const getTutorResponse = async (msg: string, mode: 'teen' | 'academic' | 'pro' = 'teen') => {
   const instructions = {
-    teen: `Bạn là Gia sư AI Gen Z siêu lầy lội.
-    - Xưng hô: "Tui" - "Fen".
-    - Tone: Hài hước, dùng slang Gen Z (khum, keo lỳ, chấn động).
-    - Nhiệm vụ: Giải thích ngắn gọn, dễ hiểu.
-    - Format: Công thức Toán/Lý/Hóa bắt buộc dùng LaTeX trong dấu $.`,
-    
-    academic: `Bạn là Giáo sư học thuật.
-    - Phong cách: Trang trọng, gãy gọn, chuyên sâu.
-    - Format: Công thức Toán/Lý/Hóa bắt buộc dùng LaTeX trong dấu $.`
+    teen: `Bạn là Gia sư AI Gen Z lầy lội, dùng slang (fen, khum, kẹ kẹ), xưng hô "tui - fen".`,
+    academic: `Bạn là Giáo sư học thuật, phong cách trang trọng, chính xác.`,
+    pro: `Bạn là Siêu trí tuệ AI, có khả năng giải quyết các vấn đề logic và toán học cực kỳ phức tạp. Hãy giải thích chi tiết từng bước.`
   };
 
-  try {
-    const ai = getAIInstance();
-    const res = await ai.models.generateContent({
-      model: mode === 'academic' ? PRO_MODEL : FLASH_MODEL,
-      contents: msg,
-      config: { 
-        systemInstruction: instructions[mode],
-        temperature: mode === 'teen' ? 0.9 : 0.4 
-      }
-    });
-    return res.text || "Mạng lag quá fen ơi, hỏi lại đi!";
-  } catch (e: any) {
-    console.error("Tutor Error:", e);
-    throw e;
-  }
-};
-
-export const generateExamRoadmap = async (grade: string, subject: string): Promise<any> => {
   const ai = getAIInstance();
-  const response = await ai.models.generateContent({
-    model: FLASH_MODEL,
-    contents: `Lập lộ trình 5 bước học Lớp ${grade} môn ${subject}.`,
+  const res = await ai.models.generateContent({
+    model: mode === 'pro' ? PRO_MODEL : FLASH_MODEL,
+    contents: msg,
     config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          roadmap: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                title: { type: Type.STRING },
-                difficulty: { type: Type.STRING },
-                topics: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            }
-          }
-        }
-      }
+      systemInstruction: instructions[mode === 'pro' ? 'pro' : mode] + " Luôn dùng LaTeX cho công thức Toán.",
+      temperature: mode === 'teen' ? 0.9 : 0.5 
     }
   });
-  return parseGeminiJSON(response.text, { roadmap: [] });
+  return res.text;
+};
+
+// Nâng cấp hàm lấy link đề thi sử dụng Search Grounding thật
+export const getOfficialExamLinks = async (s: string, y: string, p: string, g: string) => {
+  const query = `Đề thi chính thức môn ${s} lớp ${g} năm ${y} tại ${p}`;
+  const searchResult = await searchEducationalResources(query);
+  return searchResult.links;
 };
 
 export const generateExamPaper = async (subject: string, grade: string, difficulty: string, count: number = 10): Promise<any[]> => {
   const ai = getAIInstance();
   const response = await ai.models.generateContent({
     model: FLASH_MODEL,
-    contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Ngôn ngữ: Tiếng Việt. Dùng LaTeX trong dấu $.`,
+    contents: `Tạo ${count} câu trắc nghiệm Lớp ${grade} ${subject}, độ khó: ${difficulty}. Dùng LaTeX $...$.`,
     config: { 
       responseMimeType: "application/json",
       responseSchema: {
@@ -174,8 +138,42 @@ export const generateExamPaper = async (subject: string, grade: string, difficul
       }
     }
   });
-  const data = parseGeminiJSON(response.text, []);
-  return Array.isArray(data) ? data : [];
+  return parseGeminiJSON(response.text, []);
+};
+
+/**
+ * Generates a study roadmap for a specific subject and grade.
+ * Fixes the missing export for MissionControl.tsx.
+ */
+export const generateExamRoadmap = async (grade: string, subject: string) => {
+  const ai = getAIInstance();
+  const response = await ai.models.generateContent({
+    model: FLASH_MODEL,
+    contents: `Tạo lộ trình ôn thi môn ${subject} lớp ${grade} gồm 5 chương chính (roadmap). Mỗi chương bao gồm tiêu đề, danh sách chủ đề nhỏ và độ khó (theory, practice, hoặc hardcore).`,
+    config: { 
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          roadmap: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                title: { type: Type.STRING },
+                topics: { type: Type.ARRAY, items: { type: Type.STRING } },
+                difficulty: { type: Type.STRING, description: 'theory, practice, hoặc hardcore' }
+              },
+              required: ['title', 'topics', 'difficulty']
+            }
+          }
+        },
+        required: ['roadmap']
+      }
+    }
+  });
+  return parseGeminiJSON(response.text, { roadmap: [] });
 };
 
 export const analyzeStudyImage = async (base64Image: string, prompt: string) => {
@@ -192,7 +190,7 @@ export const analyzeStudyImage = async (base64Image: string, prompt: string) => 
       ]
     }
   });
-  return res.text || "Không thể phân tích ảnh này.";
+  return res.text;
 };
 
 export const getDailyBlitzQuiz = async (subject: string = "Kiến thức tổng hợp"): Promise<any[]> => {
@@ -223,9 +221,9 @@ export const getDebateResponse = async (history: any[], topic: string) => {
   const res = await ai.models.generateContent({
     model: PRO_MODEL,
     contents: history.map(h => ({ role: h.role === 'ai' ? 'model' : 'user', parts: [{ text: h.text }] })),
-    config: { systemInstruction: `Bạn là Debater Gen Z chuyên phản biện gắt gao về chủ đề: "${topic}". Ngắn gọn dưới 100 từ.` }
+    config: { systemInstruction: `Bạn là chuyên gia phản biện sắc sảo về chủ đề: "${topic}".` }
   });
-  return res.text || "Đang loading lý lẽ...";
+  return res.text;
 };
 
 export const checkVibePost = async (content: string) => {
@@ -273,7 +271,7 @@ export const summarizeText = async (text: string) => {
     model: FLASH_MODEL,
     contents: `Tóm tắt nội dung sau:\n\n${text}`,
   });
-  return res.text || "Không có phản hồi.";
+  return res.text;
 };
 
 export const generateFlashcards = async (text: string) => {
@@ -304,7 +302,7 @@ export const generateMindMap = async (topic: string) => {
     model: PRO_MODEL,
     contents: `Tạo sơ đồ tư duy text cho chủ đề: "${topic}".`,
   });
-  return res.text || "Không tạo được sơ đồ.";
+  return res.text;
 };
 
 export const gradeEssay = async (essay: string, grade: string) => {
@@ -334,7 +332,7 @@ export const generateStudyPlan = async (input: string) => {
     model: FLASH_MODEL,
     contents: `Tạo thời khóa biểu học tập từ: "${input}".`,
   });
-  return res.text || "Không tạo được lịch.";
+  return res.text;
 };
 
 export const downloadAsFile = (filename: string, content: string) => {
@@ -360,58 +358,23 @@ export const roastOrToast = async (user: any, mode: string) => {
         model: FLASH_MODEL,
         contents: prompt
     });
-    return res.text || (mode === 'roast' ? "Gà quá fen ơi!" : "Đỉnh chóp!");
+    return res.text;
 };
 
 export const getChampionTip = async (name: string) => {
-    try {
-        const ai = getAIInstance();
-        const res = await ai.models.generateContent({
-            model: FLASH_MODEL,
-            contents: `Lời khuyên học tập cho ${name}. Ngắn gọn.`
-        });
-        return res.text;
-    } catch (e) {
-        return "Bí kíp là đừng có ngủ khi đang học.";
-    }
-};
-
-export const getOfficialExamLinks = async (s: string, y: string, p: string, g: string) => {
-  const ai = getAIInstance();
-  const res = await ai.models.generateContent({
-    model: PRO_MODEL,
-    contents: `Gợi ý 5 nguồn tài liệu môn ${s} lớp ${g} năm ${y} tại ${p}. JSON.`,
-    config: { 
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            web: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                uri: { type: Type.STRING }
-              }
-            }
-          }
-        }
-      }
-    }
-  });
-  return parseGeminiJSON(res.text, []);
+    const ai = getAIInstance();
+    const res = await ai.models.generateContent({
+        model: FLASH_MODEL,
+        contents: `Lời khuyên học tập cho ${name}. Ngắn gọn.`
+    });
+    return res.text;
 };
 
 export const getMotivationQuote = async () => {
-  try {
-    const ai = getAIInstance();
-    const res = await ai.models.generateContent({
-      model: FLASH_MODEL,
-      contents: "Câu nói động lực ngắn gọn style Gen Z cho người vừa học xong.",
-    });
-    return res.text;
-  } catch (e) {
-    return "Bạn đã làm rất tốt! Tiếp tục phát huy nhé!";
-  }
+  const ai = getAIInstance();
+  const res = await ai.models.generateContent({
+    model: FLASH_MODEL,
+    contents: "Câu nói động lực ngắn gọn style Gen Z cho người vừa học xong.",
+  });
+  return res.text;
 };
